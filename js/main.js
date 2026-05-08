@@ -3,9 +3,9 @@
 // visual sync, aim-prediction, label projection, camera, render, telemetry.
 
 import { state } from './state.js';
-import { WARP_LEVELS, RENDER_SCALE, STEPS_PER_FRAME } from './data.js';
+import { WARP_LEVELS, RENDER_SCALE, DT_MAX_SUBSTEP, MAX_SUBSTEPS_PER_FRAME } from './data.js';
 import { renderer, scene, camera } from './scene.js';
-import { buildSolarSystem, computeAccelerations, step, detectImpact } from './physics.js';
+import { buildSolarSystem, computeAccelerations, step, detectImpact, mergeImpact } from './physics.js';
 import { rebuildVisuals, syncBodyVisuals, updateLabels, bodyMeshes, trailLines, labelDivs } from './visuals.js';
 import { updateCamera } from './camera.js';
 import { showImpact, updateAimVisual } from './asteroid.js';
@@ -24,16 +24,25 @@ function tick() {
   lastFrameTime = now;
 
   if (!state.paused) {
-    const totalDt = WARP_LEVELS[state.warpIdx].dt * realDt;
-    const dt = totalDt / STEPS_PER_FRAME;
-    for (let s = 0; s < STEPS_PER_FRAME; s++) {
+    // Adaptive substeps: keep dt_substep below DT_MAX_SUBSTEP so even the
+    // Moon's tight orbit stays bound at extreme warps. Capped at
+    // MAX_SUBSTEPS_PER_FRAME so a single frame can't lock up the page.
+    const totalDt   = WARP_LEVELS[state.warpIdx].dt * realDt;
+    const requested = Math.ceil(Math.abs(totalDt) / DT_MAX_SUBSTEP);
+    const nSubsteps = Math.max(1, Math.min(MAX_SUBSTEPS_PER_FRAME, requested));
+    const dt        = totalDt / nSubsteps;
+    state.lastDt = dt;
+    state.lastSubsteps = nSubsteps;
+
+    for (let s = 0; s < nSubsteps; s++) {
       step(state.bodies, dt);
       state.simTime += dt;
       const hit = detectImpact();
       if (hit) {
         const [imp, tgt, ii] = hit;
         showImpact(imp, tgt);
-        state.bodies[ii].alive = false;
+        mergeImpact(imp, tgt); // conserve mass + momentum + (axial) angular momentum
+        // remove impactor visuals
         const m = bodyMeshes.get(state.bodies[ii]); if (m) scene.remove(m);
         const l = trailLines.get(state.bodies[ii]); if (l) scene.remove(l);
         const d = labelDivs.get(state.bodies[ii]);  if (d) d.remove();
@@ -42,6 +51,7 @@ function tick() {
         break;
       }
     }
+
     // Trail bookkeeping. For parented bodies (the Moon) store the parent-
     // relative offset in render units so the orbit follows its parent and
     // gets the visual scale-up. visuals.js re-anchors at render time.

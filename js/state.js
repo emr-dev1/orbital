@@ -11,4 +11,7 @@ export const state = {
   aiming: false,
   aimStart: null,
   aimEnd: null,
+  // Reported by the integrator each frame so the HUD telemetry stays honest.
+  lastDt: 0,
+  lastSubsteps: 0,
 };

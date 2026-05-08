@@ -17,10 +17,12 @@ const MAX_ROT_PER_FRAME = Math.PI; // cap any spin so it stays legible at extrem
 const VISUAL_SPIN_BOOST = 6;       // planets spin 6x real speed for visibility
 
 function visualRadius(b) {
-  if (b.isAsteroid) return 0.6;
   if (b.name === 'SUN') return 18;
   // Power-law compression so Moon, Mars, Earth, Jupiter all stay legible.
-  return 2.0 * Math.pow(b.displayRadius / R_EARTH, 0.5);
+  // Asteroids share the formula with a 0.3-unit floor so a 10⁶ kg pebble
+  // stays clickable while a 10²⁵ kg planet-killer renders at the right size.
+  const r = 2.0 * Math.pow(b.displayRadius / R_EARTH, 0.5);
+  return b.isAsteroid ? Math.max(0.3, r) : r;
 }
 
 // Render position (in render units). For bodies with a parent (moons),
@@ -142,9 +144,24 @@ export function syncBodyVisuals(realDt) {
     if (b.name === 'SUN') sunLight.position.copy(pivot.position);
 
     const spinner = bodySpinners.get(b);
-    if (state.paused) {
-      // freeze everything — but we still iterate to keep pivot positions fresh
-      // for any bodies that might have been re-parented this frame.
+    if (spinner && b.tidallyLocked && b.parent) {
+      // True tidal lock: same face always points at the parent. We don't
+      // accumulate a rate; we set the orientation directly each frame from
+      // the geometric Moon→Earth direction in the ecliptic (XZ) plane.
+      // Axial-rotation period (and the visual spin boost) are not applied —
+      // the lock geometry already defines orientation.
+      const parent = state.bodies.find(x => x.name === b.parent);
+      if (parent) {
+        const dx = b.px - parent.px;
+        const dz = b.pz - parent.pz;
+        // angle θ for which spinner-local +X (where the prime meridian sits)
+        // points from the body toward the parent. Solving the body→parent
+        // direction in the ecliptic gives θ = atan2(dz, −dx).
+        spinner.rotation.y = Math.atan2(dz, -dx);
+      }
+    } else if (state.paused) {
+      // freeze everything — pivot positions still get refreshed above so
+      // re-parenting this frame doesn't leave stale meshes.
     } else if (spinner && b.rotPeriod) {
       // Sun is a featureless glow — don't boost its already-slow spin.
       // Everything else gets the visual boost so axial rotation is legible.

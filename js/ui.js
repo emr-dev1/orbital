@@ -2,7 +2,7 @@
 // help overlay, and global keyboard shortcuts (one-shot actions).
 
 import { state } from './state.js';
-import { WARP_LEVELS, NAV_ORDER, NAV_DIST, AU, STEPS_PER_FRAME } from './data.js';
+import { WARP_LEVELS, NAV_ORDER, NAV_DIST, AU } from './data.js';
 import { buildSolarSystem } from './physics.js';
 import { rebuildVisuals, trailLines, labelDivs, renderPos } from './visuals.js';
 import { camState } from './camera.js';
@@ -32,6 +32,10 @@ function supscript(s) {
   return s.split('').map(c => map[c] || c).join('');
 }
 function colorHex(n) { return '#' + n.toString(16).padStart(6, '0'); }
+function formatMassExp(e) {
+  const s = (e % 1 === 0) ? String(e) : e.toFixed(1);
+  return '10' + supscript(s) + ' kg';
+}
 
 function updateWarpLabel() {
   warpLabel.textContent = WARP_LEVELS[state.warpIdx].label;
@@ -46,8 +50,7 @@ function syncPauseButton() {
 // --- sliders ---
 warpEl.addEventListener('input', () => { state.warpIdx = parseInt(warpEl.value); updateWarpLabel(); });
 massEl.addEventListener('input', () => {
-  const e = parseFloat(massEl.value);
-  massLabel.textContent = '10' + supscript(e.toFixed(1)) + ' kg';
+  massLabel.textContent = formatMassExp(parseFloat(massEl.value));
 });
 speedEl.addEventListener('input', () => { speedLabel.textContent = speedEl.value + ' km/s'; });
 
@@ -181,7 +184,7 @@ window.addEventListener('keydown', e => {
 });
 
 // --- initial UI sync ---
-massLabel.textContent = '10' + supscript('12.0') + ' kg';
+massLabel.textContent = formatMassExp(parseFloat(massEl.value));
 updateWarpLabel();
 syncPauseButton();
 trailsBtn.classList.add('active');
@@ -191,7 +194,11 @@ labelsBtn.classList.add('active');
 export function updateTelemetry() {
   document.getElementById('bodyCount').textContent = state.bodies.length;
   document.getElementById('astCount').textContent = state.bodies.filter(b => b.isAsteroid).length;
-  document.getElementById('dtval').textContent = (WARP_LEVELS[state.warpIdx].dt / STEPS_PER_FRAME).toExponential(1) + ' s';
+  // Show the actual dt the integrator just used (capped by the substep rule)
+  // and how many substeps it took to cover the current warp.
+  const dt = state.lastDt || (WARP_LEVELS[state.warpIdx].dt / 1);
+  document.getElementById('dtval').textContent =
+    dt.toExponential(1) + ' s · ' + (state.lastSubsteps || 1) + 'x';
 
   const epoch = new Date('2000-01-01T12:00:00Z').getTime();
   const cur = new Date(epoch + state.simTime * 1000);

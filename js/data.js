@@ -3,9 +3,17 @@
 export const G = 6.674e-11;
 export const AU = 1.496e11;
 export const DAY = 86400;
+export const C_LIGHT = 299792458;    // m/s — used in 1PN GR correction
 export const RENDER_SCALE = 1e9;     // meters per render-unit (1 unit = 1 Gm)
 export const TNT_J = 4.184e9;        // joules per ton TNT
-export const STEPS_PER_FRAME = 4;    // physics substeps per animation frame
+
+// Adaptive timestep: aim for ~50 physics substeps per Moon orbit (Moon is
+// the fastest body in the system → it sets the stability ceiling).
+// Moon period = 2.36e6 s, so dt_substep ≤ ~47 ks. Cap substeps per frame.
+export const DT_MAX_SUBSTEP = 47000;
+export const MAX_SUBSTEPS_PER_FRAME = 200;
+
+const DEG = Math.PI / 180;
 
 // Real solar system data (J2000-ish, simplified circular orbits at t=0).
 // IAU convention: tilt = obliquity to orbit (degrees). rotPeriod is the
@@ -36,6 +44,27 @@ export const PLANET_DATA = [
 export const MOON_DATA = {
   name: 'MOON', mass: 7.342e22, r: 3.84e8, T: 27.32, rad: 1.737e6, color: 0xbfc4cc,
   rotPeriod: 27.32*86400, tilt: 6.68,
+};
+
+// J2000 heliocentric orbital elements (NASA fact-sheet values, simplified).
+// a = semi-major axis (m), e = eccentricity, i = inclination to ecliptic (rad),
+// Omega = longitude of ascending node (rad), omega = argument of perihelion (rad),
+// M0 = mean anomaly at J2000 epoch (rad).
+export const ORBITAL_ELEMENTS = {
+  MERCURY: { a: 0.387098*AU,  e: 0.205630, i: 7.005*DEG, Omega: 48.331*DEG,  omega: 29.124*DEG,  M0: 174.796*DEG },
+  VENUS:   { a: 0.723332*AU,  e: 0.006772, i: 3.395*DEG, Omega: 76.680*DEG,  omega: 54.884*DEG,  M0: 50.115*DEG  },
+  EARTH:   { a: 1.000000*AU,  e: 0.016710, i: 0.000*DEG, Omega: 0.000*DEG,   omega: 102.937*DEG, M0: 357.529*DEG },
+  MARS:    { a: 1.523679*AU,  e: 0.093394, i: 1.850*DEG, Omega: 49.578*DEG,  omega: 286.502*DEG, M0: 19.412*DEG  },
+  JUPITER: { a: 5.204267*AU,  e: 0.048775, i: 1.305*DEG, Omega: 100.464*DEG, omega: 273.867*DEG, M0: 20.020*DEG  },
+  SATURN:  { a: 9.582172*AU,  e: 0.055723, i: 2.485*DEG, Omega: 113.665*DEG, omega: 339.392*DEG, M0: 317.020*DEG },
+  URANUS:  { a: 19.229412*AU, e: 0.044405, i: 0.773*DEG, Omega: 74.006*DEG,  omega: 96.998*DEG,  M0: 142.238*DEG },
+  NEPTUNE: { a: 30.103658*AU, e: 0.011214, i: 1.770*DEG, Omega: 131.784*DEG, omega: 273.187*DEG, M0: 256.228*DEG },
+};
+
+// Moon J2000 geocentric elements (relative to ecliptic).
+export const MOON_ELEMENTS = {
+  a: 384400e3, e: 0.0549, i: 5.145*DEG,
+  Omega: 125.08*DEG, omega: 318.06*DEG, M0: 135.27*DEG,
 };
 
 export const WARP_LEVELS = [
