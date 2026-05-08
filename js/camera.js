@@ -126,7 +126,10 @@ canvas.addEventListener('mousemove', e => {
 window.addEventListener('mouseup', () => {
   if (state.aiming) {
     state.aiming = false;
-    fireAsteroid(state.aimStart, state.aimEnd);
+    // Focus body, if any, sets the velocity frame. With Earth focused, the
+    // slider speed becomes Δv relative to Earth instead of absolute, so the
+    // asteroid co-orbits the Sun and stays in Earth's neighborhood.
+    fireAsteroid(state.aimStart, state.aimEnd, camState.focusBody);
     setAimMode(false);
     return;
   }

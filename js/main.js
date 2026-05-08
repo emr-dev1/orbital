@@ -7,7 +7,7 @@ import { WARP_LEVELS, RENDER_SCALE, DT_MAX_SUBSTEP, MAX_SUBSTEPS_PER_FRAME } fro
 import { renderer, scene, camera } from './scene.js';
 import { buildSolarSystem, computeAccelerations, step, detectImpact, mergeImpact } from './physics.js';
 import { rebuildVisuals, syncBodyVisuals, updateLabels, bodyMeshes, trailLines, labelDivs } from './visuals.js';
-import { updateCamera } from './camera.js';
+import { updateCamera, camState } from './camera.js';
 import { showImpact, updateAimVisual } from './asteroid.js';
 import { populateNavDock, updateTelemetry } from './ui.js';
 
@@ -76,7 +76,7 @@ function tick() {
   }
 
   syncBodyVisuals(realDt);
-  updateAimVisual();
+  updateAimVisual(camState.focusBody);
   updateLabels(camera);
   updateCamera(realDt);
   renderer.render(scene, camera);

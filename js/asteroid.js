@@ -33,7 +33,15 @@ export function setAimMode(on) {
   canvas.style.cursor = on ? 'crosshair' : 'grab';
 }
 
-export function fireAsteroid(start, end) {
+// When focusBody is provided, slider speed is interpreted as Δv RELATIVE TO
+// THAT BODY and the body's own velocity is baked into the asteroid. Without
+// this, an asteroid spawned near Earth has no orbital velocity around the
+// Sun (Earth needs ~30 km/s tangential to stay at 1 AU), so it falls into
+// the Sun every launch. With the body's velocity included, the asteroid
+// co-orbits the Sun the same way Earth does and the slider becomes a proper
+// Earth-frame Δv — small values keep it loitering near Earth, big values
+// give it a real impact velocity.
+export function fireAsteroid(start, end, focusBody = null) {
   if (!start || !end) return;
   const dir = new THREE.Vector3().subVectors(end, start);
   if (dir.length() < 0.5) return;
@@ -48,11 +56,15 @@ export function fireAsteroid(start, end) {
   const density = 3000;
   const radius = Math.cbrt((3 * mass) / (4 * Math.PI * density));
 
+  const baseVx = focusBody ? focusBody.vx : 0;
+  const baseVy = focusBody ? focusBody.vy : 0;
+  const baseVz = focusBody ? focusBody.vz : 0;
+
   const ast = new Body({
     name: 'ASTEROID-' + (state.bodies.filter(b => b.isAsteroid).length + 1).toString().padStart(2, '0'),
     mass, displayRadius: radius, color: 0xff5530, isAsteroid: true,
     px: start.x * RENDER_SCALE, py: start.y * RENDER_SCALE, pz: start.z * RENDER_SCALE,
-    vx: dir.x * v, vy: dir.y * v, vz: dir.z * v,
+    vx: dir.x * v + baseVx, vy: dir.y * v + baseVy, vz: dir.z * v + baseVz,
   });
   state.bodies.push(ast);
   computeAccelerations(state.bodies);
@@ -60,8 +72,10 @@ export function fireAsteroid(start, end) {
 }
 
 // Per-frame: while aiming, recompute the dashed prediction and place the
-// impact marker. Called from the main tick loop.
-export function updateAimVisual() {
+// impact marker. Called from the main tick loop. focusBody is forwarded so
+// the prediction uses the same body-relative velocity convention as the
+// real launch will.
+export function updateAimVisual(focusBody = null) {
   if (!(state.aiming && state.aimStart && state.aimEnd)) {
     predLine.visible = false;
     impactMarker.visible = false;
@@ -75,9 +89,12 @@ export function updateAimVisual() {
   const v = speedKm * 1000;
   const massExp = parseFloat(document.getElementById('mass').value);
   const mass = Math.pow(10, massExp);
+  const baseVx = focusBody ? focusBody.vx : 0;
+  const baseVy = focusBody ? focusBody.vy : 0;
+  const baseVz = focusBody ? focusBody.vz : 0;
   const proto = {
     px: state.aimStart.x * RENDER_SCALE, py: state.aimStart.y * RENDER_SCALE, pz: state.aimStart.z * RENDER_SCALE,
-    vx: dir.x * v, vy: dir.y * v, vz: dir.z * v, mass,
+    vx: dir.x * v + baseVx, vy: dir.y * v + baseVy, vz: dir.z * v + baseVz, mass,
   };
   // Prediction step adapts to warp so the line looks reasonable far ahead.
   const predDt = Math.max(3600, WARP_LEVELS[state.warpIdx].dt / 2);
