@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { state } from './state.js';
 import { scene, canvas, camera } from './scene.js';
 import { Body, computeAccelerations, predictTrajectory } from './physics.js';
-import { rebuildVisuals } from './visuals.js';
+import { rebuildVisuals, renderPos, visualRadius } from './visuals.js';
 import { RENDER_SCALE, TNT_J, REF_EVENTS, WARP_LEVELS } from './data.js';
 
 // --- prediction visuals ---
@@ -26,8 +26,55 @@ export const impactMarker = new THREE.Mesh(
 impactMarker.visible = false;
 scene.add(impactMarker);
 
-export function setAimMode(on) {
+// Launchpad indicator — green ring at the auto-computed spawn position.
+// Visible whenever aim mode is active so the user can see "this is where
+// the asteroid will fire from."
+export const launchpadMarker = new THREE.Group();
+{
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x6ee7a8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+  const outer = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.3, 32), ringMat);
+  const inner = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.55, 24), ringMat);
+  launchpadMarker.add(outer, inner);
+}
+launchpadMarker.visible = false;
+scene.add(launchpadMarker);
+
+// Compute where the asteroid will spawn when aim mode is active. With a
+// focus body, place the pad just outside the body's visual sphere on the
+// camera-facing side so the user sees both the pad and the target. Without
+// a focus, drop the pad at the camera's projected ecliptic position so the
+// asteroid launches "from where you're looking."
+function computeLaunchpad(focusBody) {
+  if (!focusBody) {
+    return new THREE.Vector3(camera.position.x, 0, camera.position.z);
+  }
+  const [fbX, _fbY, fbZ] = renderPos(focusBody);
+  const dx = camera.position.x - fbX;
+  const dz = camera.position.z - fbZ;
+  const len = Math.hypot(dx, dz);
+  const offset = 1.5 * visualRadius(focusBody);
+  if (len < 0.1) return new THREE.Vector3(fbX + offset, 0, fbZ);
+  return new THREE.Vector3(fbX + dx/len * offset, 0, fbZ + dz/len * offset);
+}
+
+export function setAimMode(on, focusBody = null) {
   state.aimMode = on;
+  if (on) {
+    // Default the target to the focus body so the user gets an instant
+    // preview line. They can move the mouse to retarget anywhere.
+    if (focusBody) {
+      const [tx, ty, tz] = renderPos(focusBody);
+      state.aimEnd = new THREE.Vector3(tx, ty, tz);
+    } else {
+      state.aimEnd = null;
+    }
+  } else {
+    state.aimEnd = null;
+    state.aimStart = null;
+    launchpadMarker.visible = false;
+    predLine.visible = false;
+    impactMarker.visible = false;
+  }
   document.getElementById('aimBtn').classList.toggle('active', on);
   document.getElementById('aimHint').classList.toggle('show', on);
   canvas.style.cursor = on ? 'crosshair' : 'grab';
@@ -71,18 +118,34 @@ export function fireAsteroid(start, end, focusBody = null) {
   rebuildVisuals();
 }
 
-// Per-frame: while aiming, recompute the dashed prediction and place the
-// impact marker. Called from the main tick loop. focusBody is forwarded so
-// the prediction uses the same body-relative velocity convention as the
-// real launch will.
+// Per-frame: maintain the launchpad position, the dashed prediction, and
+// the impact marker while aim mode is on. Called from the main tick loop.
+// focusBody is forwarded so the prediction uses the same body-relative
+// velocity convention as the real launch will.
 export function updateAimVisual(focusBody = null) {
-  if (!(state.aiming && state.aimStart && state.aimEnd)) {
+  if (!state.aimMode) {
+    predLine.visible = false;
+    impactMarker.visible = false;
+    launchpadMarker.visible = false;
+    return;
+  }
+  // Always show the launchpad while aim mode is on.
+  state.aimStart = computeLaunchpad(focusBody);
+  launchpadMarker.position.copy(state.aimStart);
+  launchpadMarker.lookAt(camera.position);
+  launchpadMarker.visible = true;
+
+  if (!state.aimEnd) {
     predLine.visible = false;
     impactMarker.visible = false;
     return;
   }
   const dir = new THREE.Vector3().subVectors(state.aimEnd, state.aimStart);
-  if (dir.length() <= 0.5) return;
+  if (dir.length() <= 0.5) {
+    predLine.visible = false;
+    impactMarker.visible = false;
+    return;
+  }
   dir.normalize();
 
   const speedKm = parseFloat(document.getElementById('speed').value);

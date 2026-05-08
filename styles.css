@@ -118,11 +118,9 @@ canvas { display: block; cursor: crosshair; }
 .readout .v.warn { color: var(--warn); }
 .readout .v.good { color: var(--good); }
 
-/* BOTTOM — instructions */
-.bottom {
-  bottom: 16px; left: 16px; right: 16px;
-  display: flex; justify-content: space-between; align-items: flex-end;
-}
+/* BOTTOM — kept hidden by default to keep the scene unobstructed.
+   Press ? to open the keyboard help overlay. */
+.bottom { display: none; }
 .legend {
   font-size: 10px; color: var(--dim); letter-spacing: 0.16em;
   line-height: 1.8;
@@ -135,16 +133,15 @@ canvas { display: block; cursor: crosshair; }
   margin: 0 2px;
 }
 
-/* NAV DOCK — go-to-planet menu */
+/* NAV DOCK — go-to-planet menu, right-side stack under telemetry */
 .nav-dock {
-  bottom: 80px; left: 50%;
-  transform: translateX(-50%);
-  width: 540px;
+  top: 360px; right: 16px;
+  width: 260px;
   padding: 14px 18px;
 }
 .nav-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 6px;
 }
 .nav-btn {
@@ -213,12 +210,17 @@ canvas { display: block; cursor: crosshair; }
 
 /* AIM CROSSHAIR overlay text */
 .aim-hint {
-  position: fixed; bottom: 80px; left: 50%;
+  position: fixed; bottom: 32px; left: 50%;
   transform: translateX(-50%);
   font-size: 10px; letter-spacing: 0.32em;
   color: var(--accent); z-index: 5;
   display: none;
   text-align: center;
+  background: rgba(8,10,16,0.78);
+  border: 1px solid rgba(255,85,48,0.4);
+  padding: 8px 14px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .aim-hint.show { display: block; animation: blink 1.4s infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }

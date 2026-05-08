@@ -16,7 +16,7 @@ const R_EARTH = 6.37e6;
 const MAX_ROT_PER_FRAME = Math.PI; // cap any spin so it stays legible at extreme warp
 const VISUAL_SPIN_BOOST = 6;       // planets spin 6x real speed for visibility
 
-function visualRadius(b) {
+export function visualRadius(b) {
   if (b.name === 'SUN') return 18;
   // Power-law compression so Moon, Mars, Earth, Jupiter all stay legible.
   // Asteroids share the formula with a 0.3-unit floor so a 10⁶ kg pebble

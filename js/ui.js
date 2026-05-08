@@ -76,7 +76,7 @@ labelsBtn.onclick = () => {
   labelsBtn.classList.toggle('active', state.showLabels);
   for (const d of labelDivs.values()) d.style.display = state.showLabels ? '' : 'none';
 };
-aimBtn.onclick = () => setAimMode(!state.aimMode);
+aimBtn.onclick = () => setAimMode(!state.aimMode, camState.focusBody);
 
 closeImpactBtn.onclick = () => {
   document.getElementById('impactModal').classList.remove('show');

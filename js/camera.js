@@ -104,15 +104,19 @@ let dragging = false, lastX = 0, lastY = 0;
 
 canvas.addEventListener('mousedown', e => {
   if (state.aimMode) {
-    state.aiming = true;
-    state.aimStart = pickWorldPoint(e.clientX, e.clientY);
-    state.aimEnd = state.aimStart.clone();
+    // Aim mode is now click-to-fire. The launchpad position is auto-computed
+    // and updated in updateAimVisual; the mouse position drives the target.
+    if (state.aimStart && state.aimEnd) {
+      fireAsteroid(state.aimStart, state.aimEnd, camState.focusBody);
+      setAimMode(false);
+    }
     return;
   }
   dragging = true; lastX = e.clientX; lastY = e.clientY;
 });
 canvas.addEventListener('mousemove', e => {
-  if (state.aiming) {
+  if (state.aimMode) {
+    // While aim mode is on, mouse hover sets the aim target — no drag needed.
     state.aimEnd = pickWorldPoint(e.clientX, e.clientY);
     return;
   }
@@ -124,15 +128,6 @@ canvas.addEventListener('mousemove', e => {
   lastX = e.clientX; lastY = e.clientY;
 });
 window.addEventListener('mouseup', () => {
-  if (state.aiming) {
-    state.aiming = false;
-    // Focus body, if any, sets the velocity frame. With Earth focused, the
-    // slider speed becomes Δv relative to Earth instead of absolute, so the
-    // asteroid co-orbits the Sun and stays in Earth's neighborhood.
-    fireAsteroid(state.aimStart, state.aimEnd, camState.focusBody);
-    setAimMode(false);
-    return;
-  }
   dragging = false;
 });
 canvas.addEventListener('wheel', e => {
