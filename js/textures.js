@@ -131,9 +131,20 @@ export function makePlanetTexture(name, baseHex) {
     }
   }
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.lineWidth = 1;
+  // Prime-meridian hairline at u=0 plus a small north-pole patch so axial
+  // rotation is unmistakable on featureless bodies (Moon, Mercury). Tinted
+  // accent on the Moon to call out tidal lock once we visualize it.
+  const meridianAlpha = (name === 'MOON' || name === 'MERCURY') ? 0.55 : 0.22;
+  const meridianWidth = (name === 'MOON' || name === 'MERCURY') ? 3 : 1;
+  ctx.strokeStyle = name === 'MOON' ? `rgba(255,170,120,${meridianAlpha})` : `rgba(255,255,255,${meridianAlpha})`;
+  ctx.lineWidth = meridianWidth;
   ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 512); ctx.stroke();
+  // Tiny pole cap on featureless bodies — confirms rotation axis at a glance.
+  if (name === 'MOON' || name === 'MERCURY') {
+    ctx.fillStyle = name === 'MOON' ? 'rgba(255,170,120,0.6)' : 'rgba(255,255,255,0.4)';
+    ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 512, 18, 0, Math.PI*2); ctx.fill();
+  }
 
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;

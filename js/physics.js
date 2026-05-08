@@ -17,6 +17,9 @@ export class Body {
   }
 }
 
+// Convention: ecliptic = XZ plane (Y is up). All bodies start on +X with
+// orbital velocity in -Z, giving prograde (counter-clockwise viewed from +Y)
+// motion to match the real solar system convention.
 export function buildSolarSystem() {
   const bodies = [];
   for (const d of PLANET_DATA) {
@@ -27,7 +30,7 @@ export function buildSolarSystem() {
       ring: !!d.ring, glow: !!d.glow,
       rotPeriod: d.rotPeriod, tilt: d.tilt,
       px: d.r, py: 0, pz: 0,
-      vx: 0, vy: v, vz: 0,
+      vx: 0, vy: 0, vz: -v,
     }));
   }
   const earth = bodies.find(b => b.name === 'EARTH');
@@ -35,12 +38,12 @@ export function buildSolarSystem() {
   bodies.push(new Body({
     name: 'MOON', mass: MOON_DATA.mass, displayRadius: MOON_DATA.rad, color: MOON_DATA.color,
     rotPeriod: MOON_DATA.rotPeriod, tilt: MOON_DATA.tilt,
-    // Render-only: Moon's true orbit (0.384 Gm) sits inside Earth's visual sphere
-    // (~2 Gm). Visually expand the orbit relative to Earth so it's actually visible.
-    // Physics still uses real positions/velocities — only rendering scales.
+    // Render-only: Moon's true orbit (0.384 Gm) sits inside Earth's visual
+    // sphere (~2 Gm). Visually expand the orbit relative to Earth so it's
+    // actually visible. Physics uses real positions/velocities.
     parent: 'EARTH', displayOrbitScale: 20, tidallyLocked: true,
     px: earth.px + MOON_DATA.r, py: 0, pz: 0,
-    vx: 0, vy: earth.vy + vMoon, vz: 0,
+    vx: 0, vy: 0, vz: earth.vz - vMoon, // prograde around Earth (same sense as Earth's orbit)
   }));
   state.bodies = bodies;
   state.simTime = 0;

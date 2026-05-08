@@ -83,10 +83,14 @@ export function rebuildVisuals() {
       spinner.add(makeGlowSprite(0xffaa55, 60));
     }
 
-    // Axis-tilt pivot. Spinner spins around its own local Y; pivot tilts that axis.
+    // Axis-tilt pivot. Spinner spins around its own local Y. Orbit plane is
+    // XZ, so the orbit normal is +Y. Axial tilt is the angle between spin
+    // axis and orbit normal — rotate around X (or any axis in the XZ plane)
+    // to tip Y-axis off vertical by `tilt` degrees. Venus 177° and Uranus 98°
+    // come out flipped/sideways automatically.
     const pivot = new THREE.Group();
     if (b.tilt !== undefined) {
-      pivot.rotation.z = (b.tilt || 0) * Math.PI / 180;
+      pivot.rotation.x = (b.tilt || 0) * Math.PI / 180;
     }
     pivot.add(spinner);
     scene.add(pivot);
@@ -139,13 +143,12 @@ export function syncBodyVisuals(realDt) {
 
     const spinner = bodySpinners.get(b);
     if (spinner && b.rotPeriod) {
-      // Sun is a featureless glow, so don't visually boost its already-slow spin.
-      // Tidally-locked bodies must visibly rotate at exactly orbital rate, so
-      // skip the boost — otherwise the Moon would spin 6× per orbit.
-      const visualPeriod =
-        b.name === 'SUN'  ? b.rotPeriod * 8 :
-        b.tidallyLocked   ? b.rotPeriod :
-                            b.rotPeriod / VISUAL_SPIN_BOOST;
+      // Sun is a featureless glow — don't boost its already-slow spin.
+      // Everything else gets the visual boost so axial rotation is legible.
+      // Negative rotPeriod (Venus, Uranus) → dRot is negative → retrograde,
+      // which is the physics we want.
+      // (True synchronous tidal-lock visualization is on the roadmap.)
+      const visualPeriod = b.name === 'SUN' ? b.rotPeriod * 8 : b.rotPeriod / VISUAL_SPIN_BOOST;
       let dRot = (2 * Math.PI * rotDt) / visualPeriod;
       if (dRot >  MAX_ROT_PER_FRAME) dRot =  MAX_ROT_PER_FRAME;
       else if (dRot < -MAX_ROT_PER_FRAME) dRot = -MAX_ROT_PER_FRAME;

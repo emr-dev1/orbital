@@ -8,15 +8,17 @@ export const TNT_J = 4.184e9;        // joules per ton TNT
 export const STEPS_PER_FRAME = 4;    // physics substeps per animation frame
 
 // Real solar system data (J2000-ish, simplified circular orbits at t=0).
-// rotPeriod = sidereal rotation period in seconds (NEGATIVE = retrograde).
-// tilt = axial obliquity in degrees.
+// IAU convention: tilt = obliquity to orbit (degrees). rotPeriod is the
+// SIDEREAL day in seconds, always positive — retrograde rotation falls out
+// naturally from the >90° tilt (Venus 177°, Uranus 98°), which flips the
+// spin axis through the equator. No need to also negate rotPeriod.
 export const PLANET_DATA = [
   { name: 'SUN',     mass: 1.989e30, r: 0,           T: 0,        rad: 6.96e8,  color: 0xffcc66, glow: true,
     rotPeriod: 25.05*86400,  tilt: 7.25 },
   { name: 'MERCURY', mass: 3.301e23, r: 0.387*AU,    T: 87.97,    rad: 2.44e6,  color: 0xa39989,
     rotPeriod: 58.646*86400, tilt: 0.034 },
   { name: 'VENUS',   mass: 4.867e24, r: 0.723*AU,    T: 224.7,    rad: 6.05e6,  color: 0xe8c891,
-    rotPeriod: -243.025*86400, tilt: 177.36 },
+    rotPeriod: 243.025*86400, tilt: 177.36 },
   { name: 'EARTH',   mass: 5.972e24, r: 1.000*AU,    T: 365.25,   rad: 6.37e6,  color: 0x4a90d9,
     rotPeriod: 86164.1,      tilt: 23.44 },
   { name: 'MARS',    mass: 6.417e23, r: 1.524*AU,    T: 686.97,   rad: 3.39e6,  color: 0xc1440e,
@@ -26,7 +28,7 @@ export const PLANET_DATA = [
   { name: 'SATURN',  mass: 5.683e26, r: 9.537*AU,    T: 10759.2,  rad: 5.82e7,  color: 0xe6d4a0, ring: true,
     rotPeriod: 38362,        tilt: 26.73 },
   { name: 'URANUS',  mass: 8.681e25, r: 19.19*AU,    T: 30688.5,  rad: 2.54e7,  color: 0x8fd4d6,
-    rotPeriod: -62064,       tilt: 97.77 },
+    rotPeriod: 62064,        tilt: 97.77 },
   { name: 'NEPTUNE', mass: 1.024e26, r: 30.07*AU,    T: 60182,    rad: 2.46e7,  color: 0x4166f5,
     rotPeriod: 57996,        tilt: 28.32 },
 ];
