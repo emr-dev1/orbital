@@ -132,8 +132,8 @@ export function rebuildVisuals() {
 
 // Per-frame: position pivots, spin meshes, push trail vertices.
 export function syncBodyVisuals(realDt) {
-  // When paused, idle-spin at ~1 day per real second so planets still feel alive.
-  const rotDt = state.paused ? (3600 * realDt * 24) : (WARP_LEVELS[state.warpIdx].dt * realDt);
+  // Pause means pause: no orbital advance, no axial spin, no asteroid tumble.
+  const rotDt = state.paused ? 0 : (WARP_LEVELS[state.warpIdx].dt * realDt);
 
   for (const b of state.bodies) {
     const pivot = bodyMeshes.get(b); if (!pivot) continue;
@@ -142,12 +142,12 @@ export function syncBodyVisuals(realDt) {
     if (b.name === 'SUN') sunLight.position.copy(pivot.position);
 
     const spinner = bodySpinners.get(b);
-    if (spinner && b.rotPeriod) {
+    if (state.paused) {
+      // freeze everything — but we still iterate to keep pivot positions fresh
+      // for any bodies that might have been re-parented this frame.
+    } else if (spinner && b.rotPeriod) {
       // Sun is a featureless glow — don't boost its already-slow spin.
       // Everything else gets the visual boost so axial rotation is legible.
-      // Negative rotPeriod (Venus, Uranus) → dRot is negative → retrograde,
-      // which is the physics we want.
-      // (True synchronous tidal-lock visualization is on the roadmap.)
       const visualPeriod = b.name === 'SUN' ? b.rotPeriod * 8 : b.rotPeriod / VISUAL_SPIN_BOOST;
       let dRot = (2 * Math.PI * rotDt) / visualPeriod;
       if (dRot >  MAX_ROT_PER_FRAME) dRot =  MAX_ROT_PER_FRAME;
