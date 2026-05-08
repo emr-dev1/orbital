@@ -1,10 +1,11 @@
 // DOM wiring for the HUD: sliders, buttons, telemetry, nav dock,
 // help overlay, and global keyboard shortcuts (one-shot actions).
 
+import * as THREE from 'three';
 import { state } from './state.js';
-import { WARP_LEVELS, NAV_ORDER, NAV_DIST, AU } from './data.js';
+import { WARP_LEVELS, NAV_ORDER, NAV_DIST, AU, RENDER_SCALE } from './data.js';
 import { buildSolarSystem } from './physics.js';
-import { rebuildVisuals, trailLines, labelDivs, renderPos } from './visuals.js';
+import { rebuildVisuals, trailLines, labelDivs, renderPos, visualRadius } from './visuals.js';
 import { camState } from './camera.js';
 import { setAimMode, fireAsteroid } from './asteroid.js';
 
@@ -52,7 +53,11 @@ warpEl.addEventListener('input', () => { state.warpIdx = parseInt(warpEl.value);
 massEl.addEventListener('input', () => {
   massLabel.textContent = formatMassExp(parseFloat(massEl.value));
 });
-speedEl.addEventListener('input', () => { speedLabel.textContent = speedEl.value + ' km/s'; });
+speedEl.addEventListener('input', () => {
+  const v = parseFloat(speedEl.value);
+  // Tighter formatting at low speeds where the small-Δv transfer regime lives.
+  speedLabel.textContent = (v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : v.toFixed(0)) + ' km/s';
+});
 
 // --- buttons ---
 pauseBtn.onclick = () => { state.paused = !state.paused; syncPauseButton(); };
@@ -76,13 +81,88 @@ labelsBtn.onclick = () => {
   labelsBtn.classList.toggle('active', state.showLabels);
   for (const d of labelDivs.values()) d.style.display = state.showLabels ? '' : 'none';
 };
-aimBtn.onclick = () => setAimMode(!state.aimMode, camState.focusBody);
+// Launch state: spawn point in render units (set by clicking empty space)
+// and target body name (set by clicking a body, or via a TARGET pill).
+const launchState = { targetName: 'EARTH' };
+const launchTargetEl = document.getElementById('launchTarget');
+
+function populateLaunchTargets() {
+  launchTargetEl.innerHTML = '';
+  for (const name of NAV_ORDER) {
+    const b = state.bodies.find(x => x.name === name);
+    if (!b) continue;
+    const btn = document.createElement('button');
+    btn.className = 'launch-pill' + (launchState.targetName === name ? ' active' : '');
+    btn.dataset.name = name;
+    btn.innerHTML = `<span class="swatch" style="background:${colorHex(b.color)};color:${colorHex(b.color)}"></span>${name}`;
+    btn.onclick = () => {
+      launchState.targetName = name;
+      for (const p of launchTargetEl.children) p.classList.toggle('active', p.dataset.name === name);
+    };
+    launchTargetEl.appendChild(btn);
+  }
+}
+export function getLaunchTarget() { return state.bodies.find(b => b.name === launchState.targetName); }
+
+// Sync target pill active class with current selection. Called from the
+// scene-click event listener below.
+function setLaunchTargetByName(name) {
+  if (!NAV_ORDER.includes(name)) return;
+  launchState.targetName = name;
+  for (const p of launchTargetEl.children) p.classList.toggle('active', p.dataset.name === name);
+}
+window.addEventListener('orbital:aim-target', e => setLaunchTargetByName(e.detail.name));
+
+// Empty-space click during aim mode → relocate spawn point.
+window.addEventListener('orbital:aim-spawn', e => {
+  state.launchSpawn = new THREE.Vector3(e.detail.x, e.detail.y, e.detail.z);
+});
+
+aimBtn.onclick = () => {
+  const turningOn = !state.aimMode;
+  if (turningOn) {
+    // Default the target to a body that's NOT the current focus, so the
+    // preview line draws something obviously interesting.
+    if (camState.focusBody && NAV_ORDER.includes(camState.focusBody.name)
+        && camState.focusBody.name === launchState.targetName) {
+      const i = NAV_ORDER.indexOf(launchState.targetName);
+      launchState.targetName = NAV_ORDER[(i + 1) % NAV_ORDER.length];
+    }
+    // Default spawn — a position offset from the previous focus body so
+    // the user sees the placeholder asteroid right away. They can click
+    // anywhere on empty space to move it.
+    const seed = camState.focusBody || state.bodies.find(b => b.name === 'EARTH');
+    if (seed) {
+      const [rx, , rz] = renderPos(seed);
+      // Offset along +X by ~3 visual radii so it sits next to the body.
+      state.launchSpawn = new THREE.Vector3(rx + visualRadius(seed) * 3, 0, rz);
+    } else {
+      state.launchSpawn = new THREE.Vector3(150, 0, 0);
+    }
+    populateLaunchTargets();
+  } else {
+    state.launchSpawn = null;
+  }
+  setAimMode(turningOn);
+};
 
 const fireBtn = document.getElementById('fireBtn');
 const cancelAimBtn = document.getElementById('cancelAimBtn');
 fireBtn.onclick = () => {
-  if (!state.aimMode || !state.aimStart || !state.aimEnd) return;
-  fireAsteroid(state.aimStart, state.aimEnd, camState.focusBody);
+  if (!state.aimMode || !state.launchSpawn) return;
+  const tgt = getLaunchTarget();
+  if (!tgt) return;
+  const ast = fireAsteroid(state.launchSpawn, tgt);
+  if (ast) {
+    // Track the asteroid into its target. Initial camera distance scales to
+    // the spawn→target distance so the user sees both endpoints initially.
+    const dx = (tgt.px - state.launchSpawn.x * RENDER_SCALE) / RENDER_SCALE;
+    const dy = (tgt.py - state.launchSpawn.y * RENDER_SCALE) / RENDER_SCALE;
+    const dz = (tgt.pz - state.launchSpawn.z * RENDER_SCALE) / RENDER_SCALE;
+    const stDist = Math.hypot(dx, dy, dz);
+    camState.focusBody = ast;
+    camState.targetDist = Math.max(15, Math.min(stDist * 0.35, 400));
+  }
   setAimMode(false);
 };
 cancelAimBtn.onclick = () => setAimMode(false);
@@ -109,7 +189,6 @@ export function populateNavDock() {
 function goToBody(b) {
   camState.focusBody = b;
   camState.targetDist = NAV_DIST[b.name] || 30;
-  document.getElementById('focus').textContent = b.name;
   document.querySelectorAll('.nav-btn').forEach(el => {
     el.classList.toggle('active', el.dataset.name === b.name);
   });
@@ -117,18 +196,16 @@ function goToBody(b) {
 
 overviewBtn.onclick = () => {
   camState.focusBody = null;
-  camState.target.set(0, 0, 0);
+  camState.targetGoal.set(0, 0, 0);
   camState.targetDist = 4500;
-  document.getElementById('focus').textContent = 'OVERVIEW';
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
 };
 freeCamBtn.onclick = () => {
   if (camState.focusBody) {
     const [rx, ry, rz] = renderPos(camState.focusBody);
-    camState.target.set(rx, ry, rz);
+    camState.targetGoal.set(rx, ry, rz);
   }
   camState.focusBody = null;
-  document.getElementById('focus').textContent = 'FREE';
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
 };
 
@@ -202,12 +279,159 @@ syncPauseButton();
 trailsBtn.classList.add('active');
 labelsBtn.classList.add('active');
 
+// =====================================================================
+// BODY INSPECTOR
+// =====================================================================
+
+const insTitleEl = document.getElementById('insTitle');
+const insBodyEl  = document.getElementById('insBody');
+
+function fmtTime(s) {
+  if (s < 60) return s.toFixed(0) + ' s';
+  if (s < 3600) return (s / 60).toFixed(1) + ' min';
+  if (s < 86400) return (s / 3600).toFixed(1) + ' hr';
+  if (s < 86400 * 365) return (s / 86400).toFixed(1) + ' d';
+  return (s / 86400 / 365).toFixed(1) + ' yr';
+}
+function fmtPressure(bar) {
+  if (bar === 0) return '0';
+  if (bar < 1e-6) return bar.toExponential(1) + ' bar';
+  if (bar < 1)    return (bar * 1000).toFixed(2) + ' mbar';
+  return bar.toFixed(2) + ' bar';
+}
+function fmtPopulation(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(1) + ' BILLION';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + ' MILLION';
+  return n.toFixed(0);
+}
+function row(k, v, cls = '') {
+  return `<div class="ins-row"><span class="k">${k}</span><span class="v ${cls}">${v}</span></div>`;
+}
+function rowBar(k, v, fraction, cls = '') {
+  const pct = Math.max(0, Math.min(1, fraction)) * 100;
+  return `<div class="ins-row"><span class="k">${k}</span><span class="v ${cls}">${v}</span></div>` +
+         `<div class="ins-bar ${cls}"><span style="width:${pct.toFixed(1)}%"></span></div>`;
+}
+
+let _lastInspectedBody = null;
+
+// Build the inspector panel for `body` once. Static fields go in the HTML;
+// dynamic fields (current distance, velocity) get their own IDs and are
+// updated each frame in updateInspectorDynamic.
+function renderInspector(body) {
+  if (!body) {
+    insTitleEl.textContent = 'INSPECTOR';
+    insBodyEl.className = 'ins-empty';
+    insBodyEl.textContent = 'CLICK A BODY TO INSPECT';
+    return;
+  }
+  insBodyEl.className = '';
+
+  const swatch = body.color !== undefined
+    ? `<span class="swatch" style="background:${colorHex(body.color)};color:${colorHex(body.color)};display:inline-block;width:8px;height:8px;border-radius:50%;box-shadow:0 0 6px currentColor;margin-right:8px;vertical-align:middle;"></span>`
+    : '';
+  insTitleEl.innerHTML = swatch + '<span class="body-name">' + body.name + '</span>';
+
+  const sections = [];
+
+  if (body.type) {
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">CLASSIFICATION</div>
+      ${row('TYPE', body.type)}
+      ${body.class ? row('CLASS', body.class) : ''}
+      ${body.parent ? row('PARENT', body.parent) : ''}
+    </div>`);
+  }
+
+  sections.push(`<div class="ins-section">
+    <div class="ins-section-title">PHYSICAL</div>
+    ${row('MASS', body.mass.toExponential(2) + ' kg')}
+    ${row('RADIUS', (body.displayRadius / 1e3).toFixed(0) + ' km')}
+    ${body.surfaceGravity !== undefined ? row('SURFACE g', body.surfaceGravity.toFixed(2) + ' m/s²') : ''}
+    ${body.composition ? row('COMPOSITION', body.composition) : ''}
+  </div>`);
+
+  sections.push(`<div class="ins-section">
+    <div class="ins-section-title">ORBITAL</div>
+    <div class="ins-row" id="ins-dist"><span class="k">DIST FROM SUN</span><span class="v">— AU</span></div>
+    <div class="ins-row" id="ins-speed"><span class="k">VELOCITY</span><span class="v">— km/s</span></div>
+    ${body.tilt !== undefined ? row('AXIAL TILT', body.tilt.toFixed(2) + '°') : ''}
+    ${body.rotPeriod ? row('SIDEREAL DAY', fmtTime(Math.abs(body.rotPeriod)) + (body.rotPeriod < 0 ? ' RETROGRADE' : '')) : ''}
+  </div>`);
+
+  if (body.atmosphere) {
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">ATMOSPHERE</div>
+      ${row('COMPOSITION', body.atmosphere)}
+      ${body.pressure !== undefined ? row('PRESSURE', fmtPressure(body.pressure)) : ''}
+      ${body.surfaceTemp !== undefined ? row('SURFACE TEMP', body.surfaceTemp + ' K · ' + (body.surfaceTemp - 273).toFixed(0) + '°C') : ''}
+      ${body.cloudTopTemp !== undefined ? row('CLOUD-TOP TEMP', body.cloudTopTemp + ' K') : ''}
+    </div>`);
+  }
+
+  if (body.water !== undefined || body.biosphere) {
+    const habCls = body.habitability > 0.5 ? 'good' : body.habitability > 0.1 ? 'warn' : 'hot';
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">HABITABILITY</div>
+      ${body.water !== undefined ? rowBar('WATER COVER', (body.water * 100).toFixed(1) + '%', body.water, 'good') : ''}
+      ${body.iceCover !== undefined ? rowBar('ICE COVER', (body.iceCover * 100).toFixed(1) + '%', body.iceCover) : ''}
+      ${body.co2 !== undefined ? row('CO₂', body.co2 + ' ppm') : ''}
+      ${body.biosphere ? row('BIOSPHERE', body.biosphere, body.habitability > 0.5 ? 'good' : '') : ''}
+      ${body.habitability !== undefined ? rowBar('HABITABILITY', (body.habitability * 100).toFixed(0) + '%', body.habitability, habCls) : ''}
+    </div>`);
+  }
+
+  if (body.population !== undefined) {
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">CIVILIZATION</div>
+      ${row('POPULATION', fmtPopulation(body.population), 'good')}
+    </div>`);
+  }
+
+  if (body.luminosity) {
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">STELLAR</div>
+      ${row('LUMINOSITY', body.luminosity.toExponential(2) + ' W')}
+      ${body.coreTemp ? row('CORE TEMP', body.coreTemp.toExponential(1) + ' K') : ''}
+      ${body.fusion ? row('FUSION', body.fusion) : ''}
+      ${body.age ? row('AGE', (body.age / 1e9).toFixed(1) + ' Gyr') : ''}
+    </div>`);
+  }
+
+  if (body.moons !== undefined) {
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">SYSTEM</div>
+      ${row('MOONS', body.moons)}
+    </div>`);
+  }
+
+  if (body.notes) {
+    sections.push(`<div class="ins-notes">${body.notes}</div>`);
+  }
+
+  insBodyEl.innerHTML = sections.join('');
+}
+
+function updateInspectorDynamic(body) {
+  if (!body) return;
+  const sun = state.bodies.find(b => b.name === 'SUN');
+  const distEl = document.getElementById('ins-dist');
+  const speedEl = document.getElementById('ins-speed');
+  if (distEl && sun) {
+    const dx = body.px - sun.px, dy = body.py - sun.py, dz = body.pz - sun.pz;
+    const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    distEl.querySelector('.v').textContent = (d / AU).toFixed(3) + ' AU';
+  }
+  if (speedEl) {
+    const v = Math.sqrt(body.vx*body.vx + body.vy*body.vy + body.vz*body.vz);
+    speedEl.querySelector('.v').textContent = (v / 1000).toFixed(2) + ' km/s';
+  }
+}
+
 // --- telemetry (called from main loop) ---
 export function updateTelemetry() {
   document.getElementById('bodyCount').textContent = state.bodies.length;
   document.getElementById('astCount').textContent = state.bodies.filter(b => b.isAsteroid).length;
-  // Show the actual dt the integrator just used (capped by the substep rule)
-  // and how many substeps it took to cover the current warp.
   const dt = state.lastDt || (WARP_LEVELS[state.warpIdx].dt / 1);
   document.getElementById('dtval').textContent =
     dt.toExponential(1) + ' s · ' + (state.lastSubsteps || 1) + 'x';
@@ -216,12 +440,10 @@ export function updateTelemetry() {
   const cur = new Date(epoch + state.simTime * 1000);
   document.getElementById('simdate').textContent = cur.toISOString().slice(0,10);
 
-  const f = camState.focusBody;
-  if (f) {
-    document.getElementById('focus').textContent = f.name;
-    const d = Math.sqrt(f.px*f.px + f.py*f.py + f.pz*f.pz) / AU;
-    document.getElementById('dist').textContent = d.toFixed(3) + ' AU';
-    const v = Math.sqrt(f.vx*f.vx + f.vy*f.vy + f.vz*f.vz) / 1000;
-    document.getElementById('speed_r').textContent = v.toFixed(2) + ' km/s';
+  // Re-render inspector when focus changes; update dynamic readouts every frame.
+  if (camState.focusBody !== _lastInspectedBody) {
+    renderInspector(camState.focusBody);
+    _lastInspectedBody = camState.focusBody;
   }
+  updateInspectorDynamic(camState.focusBody);
 }

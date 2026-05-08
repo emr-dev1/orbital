@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { state } from './state.js';
 import { scene, sunLight, labelLayer } from './scene.js';
-import { makePlanetTexture, makeGlowSprite } from './textures.js';
+import { makePlanetTexture, makeGlowSprite, loadPhotoTexture } from './textures.js';
 import { RENDER_SCALE, WARP_LEVELS } from './data.js';
 
 export const bodyMeshes   = new Map(); // body -> outer pivot (axis-tilt + position)
@@ -15,6 +15,22 @@ export const labelDivs    = new Map();
 const R_EARTH = 6.37e6;
 const MAX_ROT_PER_FRAME = Math.PI; // cap any spin so it stays legible at extreme warp
 const VISUAL_SPIN_BOOST = 6;       // planets spin 6x real speed for visibility
+
+// Atmospheric halo per body. `scale` is multiplier on the body's visual
+// radius (1.0 = no halo, 1.05 = thin shell). `color` is the dominant
+// atmospheric tint — Earth blue from Rayleigh scattering, Venus tan from
+// sulfuric clouds, gas giants ~ planet body color, etc.
+const ATMOSPHERES = {
+  EARTH:   { color: 0x6699ff, opacity: 0.28, scale: 1.04 },
+  VENUS:   { color: 0xe0bf6a, opacity: 0.35, scale: 1.05 },
+  MARS:    { color: 0xc1542a, opacity: 0.10, scale: 1.03 },
+  JUPITER: { color: 0xd8b48c, opacity: 0.18, scale: 1.03 },
+  SATURN:  { color: 0xe6d4a0, opacity: 0.15, scale: 1.04 },
+  URANUS:  { color: 0x8fd4d6, opacity: 0.30, scale: 1.05 },
+  NEPTUNE: { color: 0x4988ff, opacity: 0.30, scale: 1.05 },
+  // Titan's thick nitrogen haze — denser than Earth's atmosphere.
+  TITAN:   { color: 0xd9954a, opacity: 0.35, scale: 1.10 },
+};
 
 export function visualRadius(b) {
   if (b.name === 'SUN') return 18;
@@ -60,14 +76,17 @@ export function rebuildVisuals() {
         color: b.color, roughness: 0.95, metalness: 0.1, emissive: 0x442200,
       });
     } else if (b.glow) {
-      mat = new THREE.MeshBasicMaterial({
-        map: makePlanetTexture(b.name, b.color), color: 0xffffff,
-      });
+      // Sun: BasicMaterial so the texture stays bright regardless of lighting.
+      const proc = makePlanetTexture(b.name, b.color);
+      mat = new THREE.MeshBasicMaterial({ map: proc, color: 0xffffff });
+      // Async-upgrade to NASA-style photo once it loads.
+      loadPhotoTexture(b.name, (tex) => { mat.map = tex; mat.needsUpdate = true; });
     } else {
+      const proc = makePlanetTexture(b.name, b.color);
       mat = new THREE.MeshStandardMaterial({
-        map: makePlanetTexture(b.name, b.color),
-        roughness: 0.85, metalness: 0.05,
+        map: proc, roughness: 0.85, metalness: 0.05,
       });
+      loadPhotoTexture(b.name, (tex) => { mat.map = tex; mat.needsUpdate = true; });
     }
 
     const spinner = new THREE.Mesh(geo, mat);
@@ -82,7 +101,22 @@ export function rebuildVisuals() {
       spinner.add(ring);
     }
     if (b.glow) {
-      spinner.add(makeGlowSprite(0xffaa55, 60));
+      // Layered corona — three additive sprites at increasing radii give a
+      // soft halo without a post-process bloom pass.
+      spinner.add(makeGlowSprite(0xffe9aa, 50, 0.85));
+      spinner.add(makeGlowSprite(0xff9d44, 90, 0.45));
+      spinner.add(makeGlowSprite(0xff5520, 160, 0.20));
+    }
+    // Atmospheric shell — slightly larger sphere with backside additive
+    // blending. Reads as a soft halo when viewed from outside the planet.
+    const atmo = ATMOSPHERES[b.name];
+    if (atmo) {
+      const aGeo = new THREE.SphereGeometry(rVis * atmo.scale, 32, 24);
+      const aMat = new THREE.MeshBasicMaterial({
+        color: atmo.color, transparent: true, opacity: atmo.opacity,
+        blending: THREE.AdditiveBlending, side: THREE.BackSide, depthWrite: false,
+      });
+      spinner.add(new THREE.Mesh(aGeo, aMat));
     }
 
     // Axis-tilt pivot. Spinner spins around its own local Y. Orbit plane is

@@ -37,8 +37,8 @@
     </div>
 
     <div class="ctrl">
-      <label>LAUNCH SPEED <span class="val" id="speedLabel">20 km/s</span></label>
-      <input type="range" id="speed" min="5" max="80" step="1" value="20">
+      <label>LAUNCH Δv <span class="val" id="speedLabel">5 km/s</span></label>
+      <input type="range" id="speed" min="0.2" max="80" step="0.1" value="5">
     </div>
 
     <div class="ctrl">
@@ -74,32 +74,42 @@
   </div>
 </div>
 
-<div class="hud panel right">
-  <h3>TELEMETRY</h3>
-  <div class="readout"><span class="k">BODIES</span><span class="v" id="bodyCount">0</span></div>
-  <div class="readout"><span class="k">ASTEROIDS</span><span class="v" id="astCount">0</span></div>
-  <div class="readout"><span class="k">FOCUS</span><span class="v" id="focus">SUN</span></div>
-  <div class="readout"><span class="k">DIST FROM SUN</span><span class="v" id="dist">— AU</span></div>
-  <div class="readout"><span class="k">SPEED</span><span class="v" id="speed_r">— km/s</span></div>
-  <div class="readout"><span class="k">INTEGRATOR</span><span class="v good">YOSHIDA-4 + 1PN</span></div>
-  <div class="readout"><span class="k">DT · STEPS</span><span class="v" id="dtval">— s</span></div>
+<div class="hud stack-right">
+  <div class="panel telemetry">
+    <h3>TELEMETRY</h3>
+    <div class="readout"><span class="k">BODIES</span><span class="v" id="bodyCount">0</span></div>
+    <div class="readout"><span class="k">ASTEROIDS</span><span class="v" id="astCount">0</span></div>
+    <div class="readout"><span class="k">INTEGRATOR</span><span class="v good">YOSHIDA-4 + 1PN</span></div>
+    <div class="readout"><span class="k">DT · STEPS</span><span class="v" id="dtval">— s</span></div>
+  </div>
+
+  <div class="panel inspector">
+    <h3 id="insTitle">INSPECTOR</h3>
+    <div id="insBody" class="ins-empty">CLICK A BODY TO INSPECT</div>
+  </div>
 </div>
 
 <div class="aim-panel" id="aimPanel">
   <div class="aim-header">
-    <span class="aim-title">⌬ AIM</span>
-    <span class="aim-subtitle">SET TARGET · FIRE TO LAUNCH</span>
+    <span class="aim-title">⌬ LAUNCH</span>
+    <span class="aim-subtitle" id="aimHintV">CLICK EMPTY SPACE TO PLACE THE ASTEROID</span>
   </div>
+
+  <div class="launch-row">
+    <span class="launch-label">TARGET</span>
+    <div class="launch-select" id="launchTarget"></div>
+  </div>
+
   <div class="aim-grid">
-    <div class="aim-stat"><span class="k">TARGET</span><span class="v target" id="aimTargetV">—</span></div>
     <div class="aim-stat"><span class="k">DISTANCE</span><span class="v" id="aimDistV">— Gm</span></div>
-    <div class="aim-stat"><span class="k">REL VEL</span><span class="v" id="aimVelV">— km/s</span></div>
+    <div class="aim-stat"><span class="k">SPEED</span><span class="v" id="aimVelV">— km/s</span></div>
     <div class="aim-stat"><span class="k">ETA</span><span class="v" id="aimEtaV">—</span></div>
-    <div class="aim-stat"><span class="k">IMPACT YIELD</span><span class="v" id="aimImpactV">—</span></div>
+    <div class="aim-stat"><span class="k">YIELD</span><span class="v" id="aimImpactV">—</span></div>
     <div class="aim-stat"><span class="k">VERDICT</span><span class="v" id="aimVerdictV">—</span></div>
+    <div class="aim-stat"><span class="k">PREDICTED HIT</span><span class="v" id="aimHitV">—</span></div>
   </div>
   <div class="aim-actions">
-    <button class="btn fire" id="fireBtn">⌬ FIRE</button>
+    <button class="btn fire" id="fireBtn">⌬ LAUNCH</button>
     <button class="btn" id="cancelAimBtn">CANCEL</button>
   </div>
 </div>
@@ -131,7 +141,15 @@
   <h3>⌬ KEYBOARD</h3>
 
   <div class="group">
-    <div class="group-title">CAMERA — HELD</div>
+    <div class="group-title">CAMERA — MOUSE</div>
+    <div class="row-help"><span class="k">LEFT DRAG</span><span class="v">ORBIT</span></div>
+    <div class="row-help"><span class="k">MIDDLE DRAG</span><span class="v">PAN VIEWPORT (SHIFT = FAST)</span></div>
+    <div class="row-help"><span class="k">SCROLL</span><span class="v">ZOOM</span></div>
+    <div class="row-help"><span class="k">CLICK BODY</span><span class="v">FOCUS</span></div>
+  </div>
+
+  <div class="group">
+    <div class="group-title">CAMERA — KEYBOARD</div>
     <div class="row-help"><span class="k"><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> / <kbd>↑↓←→</kbd></span><span class="v">ORBIT</span></div>
     <div class="row-help"><span class="k"><kbd>Q</kbd> / <kbd>E</kbd></span><span class="v">ZOOM OUT / IN</span></div>
     <div class="row-help"><span class="k"><kbd>[</kbd> <kbd>]</kbd></span><span class="v">PAN VERTICAL</span></div>

@@ -6,15 +6,21 @@
 import * as THREE from 'three';
 import { camera, canvas } from './scene.js';
 import { state } from './state.js';
+import { NAV_DIST } from './data.js';
 import { bodySpinners, renderPos } from './visuals.js';
 
 export const camState = {
   target: new THREE.Vector3(0, 0, 0),
+  // The camera tweens its position and look-at toward "goal" values each
+  // frame, so transitions (entering aim mode → overview, focusing a body,
+  // launching → follow asteroid) feel smooth rather than snappy.
+  targetGoal: new THREE.Vector3(0, 0, 0),
   dist: 400,
   targetDist: 400,
   yaw: 0,
   pitch: -0.4,
   focusBody: null,
+  prevFocus: null, // remember focus across an aim-mode cancel
 };
 
 const KEY_ROT_SPEED  = 1.6; // rad/s
@@ -50,25 +56,34 @@ function applyKeyboardCamera(realDt) {
   const panAmt = camState.dist * KEY_PAN_SPEED * realDt * boost;
   const right = new THREE.Vector3(Math.cos(camState.yaw), 0, -Math.sin(camState.yaw));
   const up    = new THREE.Vector3(0, 1, 0);
-  if (pressedKeys.has('Semicolon')) camState.target.addScaledVector(right, -panAmt);
-  if (pressedKeys.has('Quote'))     camState.target.addScaledVector(right,  panAmt);
-  if (pressedKeys.has('BracketLeft'))  camState.target.addScaledVector(up, -panAmt);
-  if (pressedKeys.has('BracketRight')) camState.target.addScaledVector(up,  panAmt);
+  if (pressedKeys.has('Semicolon')) camState.targetGoal.addScaledVector(right, -panAmt);
+  if (pressedKeys.has('Quote'))     camState.targetGoal.addScaledVector(right,  panAmt);
+  if (pressedKeys.has('BracketLeft'))  camState.targetGoal.addScaledVector(up, -panAmt);
+  if (pressedKeys.has('BracketRight')) camState.targetGoal.addScaledVector(up,  panAmt);
   // any pan input releases the focus lock so we don't fight the focus-tracker
   if (pressedKeys.has('Semicolon') || pressedKeys.has('Quote') || pressedKeys.has('BracketLeft') || pressedKeys.has('BracketRight')) {
     camState.focusBody = null;
-    document.getElementById('focus').textContent = 'FREE';
   }
 }
 
 export function updateCamera(realDt = 0.016) {
   applyKeyboardCamera(realDt);
 
+  // Resolve where the camera *wants* to look at this frame. With a focus
+  // body, that's the body's render position (snaps each frame so we track).
+  // Otherwise it's targetGoal — set explicitly when entering overview, panning,
+  // or following a launched asteroid.
   if (camState.focusBody) {
     const [rx, ry, rz] = renderPos(camState.focusBody);
-    camState.target.set(rx, ry, rz);
+    camState.targetGoal.set(rx, ry, rz);
   }
-  camState.dist += (camState.targetDist - camState.dist) * 0.12;
+  // Smooth tween toward the goal. Same factor for position and zoom so
+  // overview transitions and asteroid hand-offs feel coherent.
+  const k = 0.12;
+  camState.target.x += (camState.targetGoal.x - camState.target.x) * k;
+  camState.target.y += (camState.targetGoal.y - camState.target.y) * k;
+  camState.target.z += (camState.targetGoal.z - camState.target.z) * k;
+  camState.dist += (camState.targetDist - camState.dist) * k;
 
   const cy = Math.cos(camState.yaw), sy = Math.sin(camState.yaw);
   const cp = Math.cos(camState.pitch), sp = Math.sin(camState.pitch);
@@ -101,21 +116,43 @@ export function pickWorldPoint(cx, cy) {
 // --- mouse / wheel ---
 let dragging = false, lastX = 0, lastY = 0;
 
+// Camera input:
+//   Left drag           → orbit (yaw/pitch around target).
+//   Middle drag         → pan the look-at point (Shift = 2.5× speed).
+//   Wheel               → zoom.
+// Aim mode reuses the same controls so the user can reposition the view
+// while setting up a launch.
+let mouseDownX = 0, mouseDownY = 0;
+let panning = false;
+
 canvas.addEventListener('mousedown', e => {
-  if (state.aimMode) {
-    // Click in aim mode = lock the target at the click point. Mouse hover
-    // also keeps it in sync, but a deliberate click feels right and gives
-    // the user something definite to do besides hover. The actual launch is
-    // a separate FIRE button click in the aim panel.
-    state.aimEnd = pickWorldPoint(e.clientX, e.clientY);
+  mouseDownX = e.clientX; mouseDownY = e.clientY;
+  if (e.button === 1) {
+    // Middle button → pan. preventDefault stops Windows' autoscroll cursor.
+    e.preventDefault();
+    panning = true;
+    lastX = e.clientX; lastY = e.clientY;
     return;
   }
-  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  if (e.button === 0) {
+    dragging = true;
+    lastX = e.clientX; lastY = e.clientY;
+  }
 });
 canvas.addEventListener('mousemove', e => {
-  if (state.aimMode) {
-    // While aim mode is on, mouse hover sets the aim target — no drag needed.
-    state.aimEnd = pickWorldPoint(e.clientX, e.clientY);
+  if (panning) {
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    // Pan speed scales with zoom level so the world moves the same screen
+    // distance regardless of how zoomed in/out you are.
+    const scale = camState.dist * 0.0018 * (e.shiftKey ? 2.5 : 1);
+    const right = new THREE.Vector3(Math.cos(camState.yaw), 0, -Math.sin(camState.yaw));
+    const up    = new THREE.Vector3(0, 1, 0);
+    camState.targetGoal.addScaledVector(right, -dx * scale);
+    camState.targetGoal.addScaledVector(up,     dy * scale);
+    // Panning breaks the focus lock — otherwise the next frame would snap
+    // the camera back onto the focused body.
+    if (camState.focusBody) camState.focusBody = null;
     return;
   }
   if (!dragging) return;
@@ -125,8 +162,11 @@ canvas.addEventListener('mousemove', e => {
   camState.pitch = Math.max(-1.4, Math.min(1.4, camState.pitch));
   lastX = e.clientX; lastY = e.clientY;
 });
-window.addEventListener('mouseup', () => {
-  dragging = false;
+// Suppress browser middle-click defaults (autoscroll, paste-on-X11) on canvas.
+canvas.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
+window.addEventListener('mouseup', e => {
+  if (e.button === 1) panning = false;
+  if (e.button === 0) dragging = false;
 });
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
@@ -136,16 +176,36 @@ canvas.addEventListener('wheel', e => {
 }, { passive: false });
 
 canvas.addEventListener('click', e => {
-  if (state.aimMode) return;
+  // Suppress click after a drag so orbiting the camera doesn't accidentally
+  // change focus / target.
+  const dragDist = Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY);
+  if (dragDist > 5) return;
+
   const ray = makeRay(e.clientX, e.clientY);
   let closest = null, cd = Infinity;
   for (const [b, spinner] of bodySpinners) {
     const hit = ray.intersectObject(spinner);
     if (hit.length && hit[0].distance < cd) { cd = hit[0].distance; closest = b; }
   }
+  if (state.aimMode) {
+    if (closest) {
+      // Body click → set the launch TARGET.
+      window.dispatchEvent(new CustomEvent('orbital:aim-target', { detail: { name: closest.name } }));
+    } else {
+      // Empty-space click → place / relocate the asteroid spawn point on
+      // the ecliptic at the picked location.
+      const p = pickWorldPoint(e.clientX, e.clientY);
+      if (p) window.dispatchEvent(new CustomEvent('orbital:aim-spawn', { detail: { x: p.x, y: 0, z: p.z } }));
+    }
+    return;
+  }
+
   if (closest) {
     camState.focusBody = closest;
-    document.getElementById('focus').textContent = closest.name;
+    // Also auto-zoom to the body's preferred view distance — clicking a
+    // body should "take you there" without requiring a manual zoom.
+    const navDist = NAV_DIST[closest.name];
+    if (navDist !== undefined) camState.targetDist = navDist;
   }
 });
 

@@ -9,11 +9,13 @@ import { buildSolarSystem, computeAccelerations, step, detectImpact, mergeImpact
 import { rebuildVisuals, syncBodyVisuals, updateLabels, bodyMeshes, trailLines, labelDivs } from './visuals.js';
 import { updateCamera, camState } from './camera.js';
 import { showImpact, updateAimVisual } from './asteroid.js';
-import { populateNavDock, updateTelemetry } from './ui.js';
+import { buildAsteroidBelt, updateAsteroidBelt } from './asteroid_belt.js';
+import { populateNavDock, updateTelemetry, getLaunchTarget } from './ui.js';
 
 buildSolarSystem();
 computeAccelerations(state.bodies);
 rebuildVisuals();
+buildAsteroidBelt();
 populateNavDock();
 
 let lastFrameTime = performance.now();
@@ -39,9 +41,15 @@ function tick() {
       state.simTime += dt;
       const hit = detectImpact();
       if (hit) {
-        const [imp, tgt, ii] = hit;
+        const [imp, tgt, ii, _jj, tImpact] = hit;
         showImpact(imp, tgt);
-        mergeImpact(imp, tgt); // conserve mass + momentum + (axial) angular momentum
+        mergeImpact(imp, tgt, tImpact); // conserve mass + momentum + (axial) angular momentum
+        // If the camera was tracking the impactor (post-launch following),
+        // hand focus over to the target so the user keeps a frame on the
+        // collision instead of staring at empty space.
+        if (camState.focusBody === imp) {
+          camState.focusBody = tgt;
+        }
         // remove impactor visuals
         const m = bodyMeshes.get(state.bodies[ii]); if (m) scene.remove(m);
         const l = trailLines.get(state.bodies[ii]); if (l) scene.remove(l);
@@ -76,7 +84,8 @@ function tick() {
   }
 
   syncBodyVisuals(realDt);
-  updateAimVisual(camState.focusBody);
+  updateAsteroidBelt();
+  updateAimVisual(getLaunchTarget());
   updateLabels(camera);
   updateCamera(realDt);
   renderer.render(scene, camera);

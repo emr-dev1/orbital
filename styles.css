@@ -127,6 +127,67 @@ canvas { display: block; cursor: crosshair; }
   top: 90px; right: 16px; width: 260px;
 }
 
+/* Right-side flex stack: TELEMETRY + INSPECTOR. */
+.stack-right {
+  top: 90px; right: 16px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.stack-right::-webkit-scrollbar { width: 4px; }
+.stack-right::-webkit-scrollbar-thumb { background: var(--line-strong); }
+.stack-right::-webkit-scrollbar-track { background: transparent; }
+
+/* INSPECTOR — body details */
+.inspector h3 .body-name {
+  color: var(--text); letter-spacing: 0.16em;
+  font-family: 'Major Mono Display', monospace;
+}
+.ins-empty {
+  font-size: 10px; color: var(--dim);
+  letter-spacing: 0.18em; padding: 12px 0;
+  text-align: center;
+}
+.ins-section { margin-top: 12px; }
+.ins-section:first-of-type { margin-top: 0; }
+.ins-section-title {
+  font-size: 9px; letter-spacing: 0.32em; color: var(--dim);
+  margin-bottom: 6px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.ins-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; padding: 3px 0;
+}
+.ins-row .k { color: var(--dim); letter-spacing: 0.10em; }
+.ins-row .v { color: var(--text); font-weight: 500; text-align: right; max-width: 62%; word-break: break-word; }
+.ins-row .v.good { color: var(--good); }
+.ins-row .v.warn { color: var(--warn); }
+.ins-row .v.hot  { color: var(--accent); }
+.ins-bar {
+  height: 4px; background: rgba(180,200,230,0.08);
+  border: 1px solid var(--line);
+  margin-top: 4px; position: relative; overflow: hidden;
+}
+.ins-bar > span {
+  display: block; height: 100%;
+  background: var(--good);
+}
+.ins-bar.warn > span { background: var(--warn); }
+.ins-bar.hot > span  { background: var(--accent); }
+.ins-notes {
+  margin-top: 10px; padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: rgba(180,200,230,0.03);
+  font-size: 10px; line-height: 1.5;
+  color: var(--dim); letter-spacing: 0.10em;
+}
+
 .readout {
   display: flex; justify-content: space-between;
   font-size: 11px; padding: 4px 0;
@@ -283,6 +344,45 @@ canvas { display: block; cursor: crosshair; }
 .aim-stat .v.warn   { color: var(--warn); }
 .aim-stat .v.miss   { color: var(--dim); }
 .aim-actions { display: flex; gap: 8px; }
+
+/* Launch source/target selectors — body pills with planet-color swatches. */
+.launch-row {
+  display: flex; align-items: center;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+.launch-label {
+  font-size: 9px; letter-spacing: 0.26em; color: var(--dim);
+  width: 44px; flex-shrink: 0;
+  text-transform: uppercase;
+}
+.launch-select {
+  display: flex; flex-wrap: wrap; gap: 4px; flex: 1;
+}
+.launch-pill {
+  font-family: inherit;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-size: 9px; letter-spacing: 0.12em;
+  padding: 5px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+  display: flex; align-items: center; gap: 6px;
+}
+.launch-pill:hover {
+  border-color: var(--accent); color: var(--accent);
+}
+.launch-pill.active {
+  background: var(--accent); color: var(--bg);
+  border-color: var(--accent);
+}
+.launch-pill .swatch {
+  width: 6px; height: 6px; border-radius: 50%;
+  box-shadow: 0 0 4px currentColor;
+}
+.launch-pill.active .swatch { box-shadow: none; }
 .btn.fire {
   flex: 3;
   background: var(--accent); color: var(--bg);

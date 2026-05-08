@@ -1,8 +1,62 @@
 // Procedural canvas-painted textures and the sun glow sprite.
 // Each texture has a "prime meridian" hairline so axial rotation is
 // visible even on featureless bodies.
+//
+// In addition to the procedural set (used as instant placeholder), we load
+// real planet imagery from a CORS-friendly CDN and swap textures on the
+// material once each image arrives. Textures from the threex.planets repo
+// (jeromeetienne, MIT-style permissive) — equirectangular maps suitable
+// for direct UV mapping onto SphereGeometry.
 
 import * as THREE from 'three';
+
+const PHOTO_BASE = 'https://cdn.jsdelivr.net/gh/jeromeetienne/threex.planets@master/images/';
+const PHOTO_FILES = {
+  SUN:     'sunmap.jpg',
+  MERCURY: 'mercurymap.jpg',
+  VENUS:   'venusmap.jpg',
+  EARTH:   'earthmap1k.jpg',
+  MARS:    'marsmap1k.jpg',
+  JUPITER: 'jupitermap.jpg',
+  SATURN:  'saturnmap.jpg',
+  URANUS:  'uranusmap.jpg',
+  NEPTUNE: 'neptunemap.jpg',
+  MOON:    'moonmap1k.jpg',
+};
+
+const _photoCache = new Map();
+const _photoLoader = new THREE.TextureLoader();
+_photoLoader.setCrossOrigin('anonymous');
+
+// Async-load a real planet texture for `name`. Returns a THREE.Texture
+// immediately; `onLoad` fires once the image finishes downloading. Callers
+// typically use this to swap a procedural placeholder out of a material
+// once the photo is ready, so the user never sees a black sphere.
+export function loadPhotoTexture(name, onLoad) {
+  const file = PHOTO_FILES[name];
+  if (!file) return null;
+  if (_photoCache.has(name)) {
+    const cached = _photoCache.get(name);
+    if (cached._loaded && onLoad) onLoad(cached);
+    else if (onLoad) cached._onLoadCbs.push(onLoad);
+    return cached;
+  }
+  const tex = _photoLoader.load(
+    PHOTO_BASE + file,
+    (loadedTex) => {
+      tex._loaded = true;
+      for (const cb of tex._onLoadCbs) cb(loadedTex);
+      tex._onLoadCbs.length = 0;
+    },
+    undefined,
+    (err) => console.warn('[orbital] photo load failed for', name, err),
+  );
+  tex.wrapS = THREE.RepeatWrapping;
+  tex._loaded = false;
+  tex._onLoadCbs = onLoad ? [onLoad] : [];
+  _photoCache.set(name, tex);
+  return tex;
+}
 
 export function makePlanetTexture(name, baseHex) {
   const c = document.createElement('canvas');
@@ -151,7 +205,7 @@ export function makePlanetTexture(name, baseHex) {
   return tex;
 }
 
-export function makeGlowSprite(color, size) {
+export function makeGlowSprite(color, size, opacity = 1) {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
   const g = ctx.createRadialGradient(128,128,0,128,128,128);
@@ -161,7 +215,10 @@ export function makeGlowSprite(color, size) {
   g.addColorStop(1, '#00000000');
   ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
   const tex = new THREE.CanvasTexture(c);
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  const mat = new THREE.SpriteMaterial({
+    map: tex, transparent: true, opacity,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
   const s = new THREE.Sprite(mat); s.scale.set(size, size, 1);
   return s;
 }

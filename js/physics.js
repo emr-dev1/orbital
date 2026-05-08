@@ -6,7 +6,7 @@
 // Barycentric momentum is zeroed so the system COM stays at the origin.
 
 import { state } from './state.js';
-import { G, ORBITAL_ELEMENTS, MOON_ELEMENTS, PLANET_DATA, MOON_DATA, RENDER_SCALE, C_LIGHT } from './data.js';
+import { G, ORBITAL_ELEMENTS, MOON_ELEMENTS, PLANET_DATA, MOON_DATA, MOON_LIST, RENDER_SCALE, C_LIGHT, BODY_INFO } from './data.js';
 
 export class Body {
   constructor(opts) {
@@ -14,6 +14,11 @@ export class Body {
     this.px = opts.px || 0; this.py = opts.py || 0; this.pz = opts.pz || 0;
     this.vx = opts.vx || 0; this.vy = opts.vy || 0; this.vz = opts.vz || 0;
     this.ax = 0; this.ay = 0; this.az = 0;
+    // Position at the start of the current physics step. Used by continuous
+    // collision detection so a fast asteroid can't tunnel through a planet
+    // between substeps. Initialised to current position so the first step's
+    // CCD doesn't see spurious motion.
+    this.prevPx = this.px; this.prevPy = this.py; this.prevPz = this.pz;
     this.alive = true;
     this.isAsteroid = !!opts.isAsteroid;
     this.trail = [];
@@ -111,7 +116,7 @@ export function buildSolarSystem() {
     }));
   }
 
-  // Moon — geocentric elements, then converted to heliocentric by adding Earth's state.
+  // Earth's Moon — geocentric elements, converted to heliocentric.
   const earth = bodies.find(b => b.name === 'EARTH');
   const muEarth = G * earth.mass;
   const moonRel = elementsToState(MOON_ELEMENTS, muEarth);
@@ -123,7 +128,37 @@ export function buildSolarSystem() {
     vx: earth.vx + moonRel.vx, vy: earth.vy + moonRel.vy, vz: earth.vz + moonRel.vz,
   }));
 
+  // Major moons of the other planets — Phobos/Deimos, the Galileans, Titan,
+  // Enceladus, Titania, Triton. Built from MOON_LIST and parented to their
+  // planet so visual scale-up keeps the orbits visible.
+  for (const m of MOON_LIST) {
+    const parent = bodies.find(b => b.name === m.parent);
+    if (!parent) continue;
+    const muParent = G * parent.mass;
+    const rel = elementsToState({ a: m.a, e: m.e, i: m.i, Omega: m.Omega, omega: m.omega, M0: m.M0 }, muParent);
+    bodies.push(new Body({
+      name: m.name, mass: m.mass, displayRadius: m.rad, color: m.color,
+      rotPeriod: m.rotPeriod, tilt: m.tilt,
+      parent: m.parent, displayOrbitScale: m.displayOrbitScale, tidallyLocked: !!m.tidallyLocked,
+      // Optional habitability seeds — picked up by the inspector below.
+      water: m.water, biosphere: m.biosphere, habitability: m.habitability,
+      atmosphere: m.atmosphere, pressure: m.pressure, notes: m.notes,
+      type: 'NATURAL SATELLITE',
+      px: parent.px + rel.px, py: parent.py + rel.py, pz: parent.pz + rel.pz,
+      vx: parent.vx + rel.vx, vy: parent.vy + rel.vy, vz: parent.vz + rel.vz,
+    }));
+  }
+
   zeroBarycenter(bodies);
+
+  // Seed each body with its descriptor from BODY_INFO so the inspector can
+  // read mutable fields (water, biosphere, population, …). Future climate /
+  // life simulation passes will mutate these in place per impact / per year.
+  for (const b of bodies) {
+    const info = BODY_INFO[b.name];
+    if (info) Object.assign(b, info);
+  }
+
   state.bodies = bodies;
   state.simTime = 0;
 }
@@ -213,6 +248,14 @@ function _kick(arr, dt) {
 }
 
 export function step(arr, dt) {
+  // Snapshot positions at the start of the substep so detectImpact can do
+  // segment-vs-sphere CCD against the body's pre-step position. Without
+  // this, a fast asteroid moving > planet diameter per substep tunnels
+  // through with no collision recorded.
+  for (const b of arr) {
+    if (!b.alive) continue;
+    b.prevPx = b.px; b.prevPy = b.py; b.prevPz = b.pz;
+  }
   _drift(arr, _C[0] * dt);
   _kick (arr, _D[0] * dt);
   _drift(arr, _C[1] * dt);
@@ -226,19 +269,53 @@ export function step(arr, dt) {
 // Collision detection and trajectory prediction
 // =====================================================================
 
+// Continuous collision: does the relative-position segment between
+// (a_prev − b_prev) and (a_curr − b_curr) ever come within sumR? Solve
+// |p + t·Δp|² = sumR² for t ∈ [0,1]. Returns the earliest entry t, or −1.
+// Both bodies' motion is taken into account so an asteroid skimming Earth
+// while Earth orbits the Sun still reads correctly.
+function ccdHit(a, b, sumR) {
+  const px = a.prevPx - b.prevPx;
+  const py = a.prevPy - b.prevPy;
+  const pz = a.prevPz - b.prevPz;
+  const drx = (a.px - b.px) - px;
+  const dry = (a.py - b.py) - py;
+  const drz = (a.pz - b.pz) - pz;
+  const A = drx*drx + dry*dry + drz*drz;
+  const B = 2 * (px*drx + py*dry + pz*drz);
+  const C = px*px + py*py + pz*pz - sumR*sumR;
+  if (A < 1e-30) return C <= 0 ? 0 : -1;        // no relative motion
+  const disc = B*B - 4*A*C;
+  if (disc < 0) return -1;                       // miss
+  const sq = Math.sqrt(disc);
+  const t1 = (-B - sq) / (2*A);
+  const t2 = (-B + sq) / (2*A);
+  if (t1 >= 0 && t1 <= 1) return t1;             // entered during this step
+  if (t2 >= 0 && t2 <= 1) return t2;             // exit-only — endpoint inside
+  if (C <= 0) return 0;                          // already overlapping at step start
+  return -1;
+}
+
+// Find the earliest collision in the most-recent substep. Returns
+// [impactor, target, impactorIdx, targetIdx, tImpact] or null.
+// tImpact ∈ [0,1] is the fractional substep time of contact, used by
+// mergeImpact to compute the lever arm at the actual collision instant.
 export function detectImpact() {
   const bodies = state.bodies;
+  let best = null;
   for (let i = 0; i < bodies.length; i++) {
     const a = bodies[i]; if (!a.alive || !a.isAsteroid) continue;
     for (let j = 0; j < bodies.length; j++) {
       if (i === j) continue;
       const b = bodies[j]; if (!b.alive) continue;
-      const dx = b.px - a.px, dy = b.py - a.py, dz = b.pz - a.pz;
-      const d  = Math.sqrt(dx*dx + dy*dy + dz*dz);
-      if (d < (a.displayRadius + b.displayRadius) * 1.02) return [a, b, i, j];
+      const sumR = a.displayRadius + b.displayRadius;
+      const t = ccdHit(a, b, sumR);
+      if (t >= 0 && (!best || t < best.t)) {
+        best = { a, b, i, j, t };
+      }
     }
   }
-  return null;
+  return best ? [best.a, best.b, best.i, best.j, best.t] : null;
 }
 
 // Forward shadow simulation against a copy of the world. Used to draw the
@@ -249,16 +326,17 @@ export function detectImpact() {
 export function predictTrajectory(asteroidProto, steps, dtPredict) {
   const clones = state.bodies.map(b => ({
     px: b.px, py: b.py, pz: b.pz,
+    prevPx: b.px, prevPy: b.py, prevPz: b.pz,
     vx: b.vx, vy: b.vy, vz: b.vz,
     ax: 0, ay: 0, az: 0,
     mass: b.mass, alive: b.alive, displayRadius: b.displayRadius,
     name: b.name,
   }));
-  // Probe radius from its mass + density (matches fireAsteroid).
   const density = 3000;
   const probeRadius = Math.cbrt((3 * asteroidProto.mass) / (4 * Math.PI * density));
   clones.push({
     px: asteroidProto.px, py: asteroidProto.py, pz: asteroidProto.pz,
+    prevPx: asteroidProto.px, prevPy: asteroidProto.py, prevPz: asteroidProto.pz,
     vx: asteroidProto.vx, vy: asteroidProto.vy, vz: asteroidProto.vz,
     ax: 0, ay: 0, az: 0,
     mass: asteroidProto.mass, alive: true, displayRadius: probeRadius,
@@ -269,14 +347,15 @@ export function predictTrajectory(asteroidProto, steps, dtPredict) {
   let impactIdx = -1;
   const probe = clones[clones.length - 1];
   for (let s = 0; s < steps; s++) {
-    step(clones, dtPredict);
+    step(clones, dtPredict); // step() snapshots prev for CCD
     path.push([probe.px / RENDER_SCALE, probe.py / RENDER_SCALE, probe.pz / RENDER_SCALE]);
+    // CCD against every solar-system body in the prediction.
     for (let j = 0; j < clones.length - 1; j++) {
       const tgt = clones[j];
-      const dx = tgt.px - probe.px, dy = tgt.py - probe.py, dz = tgt.pz - probe.pz;
-      const d2 = dx*dx + dy*dy + dz*dz;
-      const rSum = tgt.displayRadius + probe.displayRadius;
-      if (d2 < rSum * rSum * 1.04) { impactIdx = j; s = steps; break; }
+      if (!tgt.alive) continue;
+      const sumR = tgt.displayRadius + probe.displayRadius;
+      const t = ccdHit(probe, tgt, sumR);
+      if (t >= 0) { impactIdx = j; s = steps; break; }
     }
   }
   return { path, impactIdx };
@@ -290,16 +369,26 @@ export function predictTrajectory(asteroidProto, steps, dtPredict) {
 // spin axis (a uniform-sphere moment of inertia, I = 2/5 M R²). The spin
 // axis itself does not tilt — that's a more involved rigid-body update we
 // can take on later.
-export function mergeImpact(impactor, target) {
+export function mergeImpact(impactor, target, tImpact = 1) {
   const mTotal = target.mass + impactor.mass;
+
+  // Position at the moment of impact, interpolated within the substep so
+  // the angular-momentum lever arm reflects where contact actually happened
+  // (not a post-step position that may have tunnelled past the target).
+  const ax = impactor.prevPx + (impactor.px - impactor.prevPx) * tImpact;
+  const ay = impactor.prevPy + (impactor.py - impactor.prevPy) * tImpact;
+  const az = impactor.prevPz + (impactor.pz - impactor.prevPz) * tImpact;
+  const bx = target.prevPx + (target.px - target.prevPx) * tImpact;
+  const by = target.prevPy + (target.py - target.prevPy) * tImpact;
+  const bz = target.prevPz + (target.pz - target.prevPz) * tImpact;
 
   // Save pre-merge relative kinematics for the angular momentum projection
   const dvx0 = impactor.vx - target.vx;
   const dvy0 = impactor.vy - target.vy;
   const dvz0 = impactor.vz - target.vz;
-  const rx = impactor.px - target.px;
-  const ry = impactor.py - target.py;
-  const rz = impactor.pz - target.pz;
+  const rx = ax - bx;
+  const ry = ay - by;
+  const rz = az - bz;
 
   // Linear momentum: target gets the COM velocity of the merged pair.
   target.vx = (target.mass * target.vx + impactor.mass * impactor.vx) / mTotal;

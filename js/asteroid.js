@@ -6,11 +6,15 @@ import { state } from './state.js';
 import { scene, canvas, camera } from './scene.js';
 import { Body, computeAccelerations, predictTrajectory } from './physics.js';
 import { rebuildVisuals, renderPos, visualRadius } from './visuals.js';
-import { RENDER_SCALE, TNT_J, REF_EVENTS, WARP_LEVELS } from './data.js';
+import { camState } from './camera.js';
+import { G, RENDER_SCALE, TNT_J, REF_EVENTS, WARP_LEVELS } from './data.js';
 
 // --- prediction visuals ---
+// 1500 vertex capacity so multi-year transfer trajectories (Earth → Saturn,
+// Earth → Uranus) can be drawn end-to-end at high warps without truncating.
+const PRED_CAPACITY = 1500;
 const predGeo = new THREE.BufferGeometry();
-predGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(800 * 3), 3));
+predGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PRED_CAPACITY * 3), 3));
 const predMat = new THREE.LineDashedMaterial({
   color: 0xff5530, dashSize: 2, gapSize: 1.5, transparent: true, opacity: 0.9,
 });
@@ -26,89 +30,126 @@ export const impactMarker = new THREE.Mesh(
 impactMarker.visible = false;
 scene.add(impactMarker);
 
-// Launchpad indicator — green ring at the auto-computed spawn position.
-// Visible whenever aim mode is active so the user can see "this is where
-// the asteroid will fire from."
+// Asteroid placeholder — a small red sphere wrapped in a green wireframe
+// halo so it reads as "ghost asteroid sitting here, ready to launch."
+// Sits at state.launchSpawn while aim mode is active.
 export const launchpadMarker = new THREE.Group();
 {
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0x6ee7a8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
-  const outer = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.3, 32), ringMat);
-  const inner = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.55, 24), ringMat);
-  launchpadMarker.add(outer, inner);
+  const astMat = new THREE.MeshBasicMaterial({ color: 0xff5530 });
+  const ast = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 12), astMat);
+  const haloMat = new THREE.MeshBasicMaterial({ color: 0x6ee7a8, wireframe: true, transparent: true, opacity: 0.45 });
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.95, 14, 10), haloMat);
+  launchpadMarker.add(ast, halo);
 }
 launchpadMarker.visible = false;
 scene.add(launchpadMarker);
 
-// Compute where the asteroid will spawn when aim mode is active. With a
-// focus body, place the pad just outside the body's visual sphere on the
-// camera-facing side so the user sees both the pad and the target. Without
-// a focus, drop the pad at the camera's projected ecliptic position so the
-// asteroid launches "from where you're looking."
-function computeLaunchpad(focusBody) {
-  if (!focusBody) {
-    return new THREE.Vector3(camera.position.x, 0, camera.position.z);
-  }
-  const [fbX, _fbY, fbZ] = renderPos(focusBody);
-  const dx = camera.position.x - fbX;
-  const dz = camera.position.z - fbZ;
-  const len = Math.hypot(dx, dz);
-  const offset = 1.5 * visualRadius(focusBody);
-  if (len < 0.1) return new THREE.Vector3(fbX + offset, 0, fbZ);
-  return new THREE.Vector3(fbX + dx/len * offset, 0, fbZ + dz/len * offset);
+// Local circular orbital velocity (prograde, CCW around +Y) at a given
+// position relative to the Sun. Without this, an asteroid placed in space
+// has no Sun-orbital momentum and just falls straight in. With this
+// baked in, the placeholder asteroid is co-orbiting the Sun like a real
+// solar-system body would, and the slider speed becomes a Δv on top of
+// that — exactly what the user expects to see.
+function localOrbitalVelocity(spawnPxM, spawnPyM, spawnPzM) {
+  const sun = state.bodies.find(b => b.name === 'SUN');
+  if (!sun) return { vx: 0, vy: 0, vz: 0 };
+  const dxSun = spawnPxM - sun.px;
+  const dzSun = spawnPzM - sun.pz;
+  const r = Math.hypot(dxSun, dzSun);
+  if (r < 1e9) return { vx: 0, vy: 0, vz: 0 }; // too close to Sun, skip
+  const vCirc = Math.sqrt(G * sun.mass / r);
+  // Tangent prograde: perpendicular to radius in XZ plane (CCW from +Y).
+  return {
+    vx: sun.vx + vCirc * dzSun / r,
+    vy: sun.vy,
+    vz: sun.vz - vCirc * dxSun / r,
+  };
 }
 
-export function setAimMode(on, focusBody = null) {
+// Compute the launch state for a free spawn point + target body: spawn in
+// physical units, baseline orbital velocity, direction-to-target, and
+// distance. Returns null if any input is missing.
+function computeLaunchState(spawnRender, target) {
+  if (!spawnRender || !target) return null;
+  const spawnPxM = spawnRender.x * RENDER_SCALE;
+  const spawnPyM = spawnRender.y * RENDER_SCALE;
+  const spawnPzM = spawnRender.z * RENDER_SCALE;
+  const dx = target.px - spawnPxM;
+  const dy = target.py - spawnPyM;
+  const dz = target.pz - spawnPzM;
+  const distM = Math.hypot(dx, dy, dz);
+  if (distM < 1) return null;
+  const baseV = localOrbitalVelocity(spawnPxM, spawnPyM, spawnPzM);
+  return {
+    spawnPxM, spawnPyM, spawnPzM,
+    dirX: dx / distM, dirY: dy / distM, dirZ: dz / distM,
+    distM, baseV,
+  };
+}
+
+export function setAimMode(on) {
   state.aimMode = on;
   if (on) {
-    // Default the target to the focus body so the user gets an instant
-    // preview line. They can move the mouse to retarget anywhere.
-    if (focusBody) {
-      const [tx, ty, tz] = renderPos(focusBody);
-      state.aimEnd = new THREE.Vector3(tx, ty, tz);
-    } else {
-      state.aimEnd = null;
-    }
+    // Pull the camera back to a system-overview view so the user can see
+    // every body and click on the one they want as a target. Save current
+    // focus so we can restore it on cancel.
+    camState.prevFocus = camState.focusBody;
+    camState.focusBody = null;
+    camState.targetGoal.set(0, 0, 0);
+    camState.targetDist = 4500;
   } else {
     state.aimEnd = null;
     state.aimStart = null;
     launchpadMarker.visible = false;
     predLine.visible = false;
     impactMarker.visible = false;
+    // If focus is still null (cancel rather than launch), restore prev focus.
+    // After a launch, ui.js has already set focusBody to the new asteroid
+    // so we leave it alone.
+    if (!camState.focusBody && camState.prevFocus) {
+      camState.focusBody = camState.prevFocus;
+    }
+    camState.prevFocus = null;
   }
   document.getElementById('aimBtn').classList.toggle('active', on);
   document.getElementById('aimPanel').classList.toggle('show', on);
   canvas.style.cursor = on ? 'crosshair' : 'grab';
 }
 
-// Fill the live AIM panel readouts: nearest-body target, distance, ETA at
-// current slider speed, kinetic energy at impact (rough estimate using slider
-// speed as relative velocity), and a damage verdict. Called each frame from
-// updateAimVisual when aim mode is active.
-function fillAimPanel(focusBody, predImpactIdx, predLastPoint) {
-  if (!state.aimMode || !state.aimStart || !state.aimEnd) return;
+// Live readouts for the LAUNCH panel and the contextual hint header.
+function fillAimPanel(spawnRender, target, predImpactIdx, launchState) {
+  if (!state.aimMode) return;
 
-  // Nearest body to aim point — capture only when the cursor is reasonably
-  // close so floating-around-empty-space reads as "FREE POINT".
-  let nearest = null, nearestD = Infinity;
-  for (const b of state.bodies) {
-    const [bx, , bz] = renderPos(b);
-    const dx = bx - state.aimEnd.x;
-    const dz = bz - state.aimEnd.z;
-    const d  = Math.hypot(dx, dz);
-    const cap = Math.max(visualRadius(b) * 1.8, 1.0);
-    if (d < cap && d < nearestD) { nearestD = d; nearest = b; }
+  const hintEl = document.getElementById('aimHintV');
+  const fireBtn = document.getElementById('fireBtn');
+
+  // Update the wizard hint based on what's been set.
+  if (!spawnRender) {
+    hintEl.textContent = 'CLICK EMPTY SPACE TO PLACE THE ASTEROID';
+  } else if (!target) {
+    hintEl.textContent = 'CLICK A BODY TO SET THE TARGET';
+  } else {
+    hintEl.textContent = 'TUNE MASS / SPEED · CLICK LAUNCH WHEN READY';
   }
-  document.getElementById('aimTargetV').textContent = nearest ? nearest.name : 'FREE POINT';
 
-  // Render-space distance from launchpad to current target → physical units.
-  const ddx = (state.aimEnd.x - state.aimStart.x) * RENDER_SCALE;
-  const ddy = (state.aimEnd.y - state.aimStart.y) * RENDER_SCALE;
-  const ddz = (state.aimEnd.z - state.aimStart.z) * RENDER_SCALE;
-  const distM = Math.hypot(ddx, ddy, ddz);
+  if (!spawnRender || !target || !launchState) {
+    document.getElementById('aimDistV').textContent = '—';
+    document.getElementById('aimVelV').textContent  = '—';
+    document.getElementById('aimEtaV').textContent  = '—';
+    document.getElementById('aimImpactV').textContent = '—';
+    document.getElementById('aimVerdictV').textContent = '—';
+    document.getElementById('aimVerdictV').className = 'v';
+    document.getElementById('aimHitV').textContent  = '—';
+    document.getElementById('aimHitV').className    = 'v';
+    fireBtn.disabled = true;
+    return;
+  }
+  fireBtn.disabled = false;
+
+  const distM = launchState.distM;
   document.getElementById('aimDistV').textContent =
     distM < 1e9 ? (distM/1e6).toFixed(1) + ' Mm' : (distM/1e9).toFixed(2) + ' Gm';
 
-  // Slider-derived numbers
   const speedKm = parseFloat(document.getElementById('speed').value);
   document.getElementById('aimVelV').textContent = speedKm.toFixed(0) + ' km/s';
 
@@ -129,107 +170,107 @@ function fillAimPanel(focusBody, predImpactIdx, predLastPoint) {
     TNT_Mt < 1e-3 ? TNT_t.toExponential(1) + ' t' : TNT_Mt.toExponential(1) + ' Mt';
 
   const verdictEl = document.getElementById('aimVerdictV');
-  let verdict, hot;
-  if (!nearest)               { verdict = 'NO TARGET'; hot = 'miss'; }
-  else if (predImpactIdx < 0) { verdict = 'WILL MISS';  hot = 'miss'; }
-  else if (TNT_Mt < 0.01)     { verdict = 'AIRBURST';   hot = '';     }
-  else if (TNT_Mt < 50)       { verdict = 'CITY-KILLER';hot = 'warn'; }
-  else if (TNT_Mt < 1e5)      { verdict = 'CONTINENTAL';hot = 'warn'; }
-  else if (TNT_Mt < 1e8)      { verdict = 'EXTINCTION'; hot = 'target'; }
-  else                        { verdict = 'PLANET-CRACKER'; hot = 'target'; }
+  let verdict, cls;
+  if      (TNT_Mt < 0.01) { verdict = 'AIRBURST';        cls = '';       }
+  else if (TNT_Mt < 50)   { verdict = 'CITY-KILLER';     cls = 'warn';   }
+  else if (TNT_Mt < 1e5)  { verdict = 'CONTINENTAL';     cls = 'warn';   }
+  else if (TNT_Mt < 1e8)  { verdict = 'EXTINCTION';      cls = 'target'; }
+  else                    { verdict = 'PLANET-CRACKER';  cls = 'target'; }
   verdictEl.textContent = verdict;
-  verdictEl.className = 'v ' + hot;
+  verdictEl.className = 'v ' + cls;
 
-  // Disable FIRE button when there's no actual target to hit (no path or no
-  // body in the prediction's collision check). The asteroid still fires —
-  // we just visually flag it as a miss so the user knows.
-  const fireBtn = document.getElementById('fireBtn');
-  if (predImpactIdx < 0 && !nearest) fireBtn.classList.add('miss');
-  else fireBtn.classList.remove('miss');
+  const hitEl = document.getElementById('aimHitV');
+  if (predImpactIdx >= 0) {
+    hitEl.textContent = 'YES · ' + target.name;
+    hitEl.className = 'v target';
+  } else {
+    hitEl.textContent = 'WILL MISS';
+    hitEl.className = 'v miss';
+  }
 }
 
-// When focusBody is provided, slider speed is interpreted as Δv RELATIVE TO
-// THAT BODY and the body's own velocity is baked into the asteroid. Without
-// this, an asteroid spawned near Earth has no orbital velocity around the
-// Sun (Earth needs ~30 km/s tangential to stay at 1 AU), so it falls into
-// the Sun every launch. With the body's velocity included, the asteroid
-// co-orbits the Sun the same way Earth does and the slider becomes a proper
-// Earth-frame Δv — small values keep it loitering near Earth, big values
-// give it a real impact velocity.
-export function fireAsteroid(start, end, focusBody = null) {
-  if (!start || !end) return;
-  const dir = new THREE.Vector3().subVectors(end, start);
-  if (dir.length() < 0.5) return;
-  dir.normalize();
+// Launch from a free spawn point toward a target body. Velocity is
+// baseline-orbital-at-the-spawn-point (so the asteroid co-orbits the Sun
+// like a planet would) plus (slider km/s) × direction-to-target. Without
+// the orbital baseline, asteroids would just fall straight into the Sun
+// and gravity wouldn't appear to "work."
+//
+// Returns the new asteroid Body so callers can hand it to the camera for
+// auto-tracking.
+export function fireAsteroid(spawnRender, target) {
+  const ls = computeLaunchState(spawnRender, target);
+  if (!ls) return null;
+  const { spawnPxM, spawnPyM, spawnPzM, dirX, dirY, dirZ, baseV } = ls;
 
   const speedKm = parseFloat(document.getElementById('speed').value);
   const v = speedKm * 1000;
   const massExp = parseFloat(document.getElementById('mass').value);
   const mass = Math.pow(10, massExp);
 
-  // physical radius assuming density 3000 kg/m^3
   const density = 3000;
   const radius = Math.cbrt((3 * mass) / (4 * Math.PI * density));
-
-  const baseVx = focusBody ? focusBody.vx : 0;
-  const baseVy = focusBody ? focusBody.vy : 0;
-  const baseVz = focusBody ? focusBody.vz : 0;
 
   const ast = new Body({
     name: 'ASTEROID-' + (state.bodies.filter(b => b.isAsteroid).length + 1).toString().padStart(2, '0'),
     mass, displayRadius: radius, color: 0xff5530, isAsteroid: true,
-    px: start.x * RENDER_SCALE, py: start.y * RENDER_SCALE, pz: start.z * RENDER_SCALE,
-    vx: dir.x * v + baseVx, vy: dir.y * v + baseVy, vz: dir.z * v + baseVz,
+    px: spawnPxM, py: spawnPyM, pz: spawnPzM,
+    vx: baseV.vx + dirX * v, vy: baseV.vy + dirY * v, vz: baseV.vz + dirZ * v,
   });
   state.bodies.push(ast);
   computeAccelerations(state.bodies);
   rebuildVisuals();
+  return ast;
 }
 
-// Per-frame: maintain the launchpad position, the dashed prediction, and
-// the impact marker while aim mode is on. Called from the main tick loop.
-// focusBody is forwarded so the prediction uses the same body-relative
-// velocity convention as the real launch will.
-export function updateAimVisual(focusBody = null) {
+// Per-frame: maintain the asteroid placeholder, the dashed prediction,
+// and the impact marker while aim mode is on. Spawn comes from
+// state.launchSpawn (set by clicking empty space) and target from the
+// current TARGET pill.
+export function updateAimVisual(target) {
   if (!state.aimMode) {
     predLine.visible = false;
     impactMarker.visible = false;
     launchpadMarker.visible = false;
     return;
   }
-  // Always show the launchpad while aim mode is on.
-  state.aimStart = computeLaunchpad(focusBody);
-  launchpadMarker.position.copy(state.aimStart);
-  launchpadMarker.lookAt(camera.position);
+
+  const spawnRender = state.launchSpawn;
+  if (!spawnRender) {
+    // No spawn yet — hide everything until the user clicks empty space.
+    launchpadMarker.visible = false;
+    predLine.visible = false;
+    impactMarker.visible = false;
+    fillAimPanel(null, target, -1, null);
+    return;
+  }
+
+  // Always show the placeholder asteroid where the user has placed it.
+  launchpadMarker.position.copy(spawnRender);
   launchpadMarker.visible = true;
 
-  if (!state.aimEnd) {
+  const ls = computeLaunchState(spawnRender, target);
+  if (!ls) {
     predLine.visible = false;
     impactMarker.visible = false;
+    fillAimPanel(spawnRender, target, -1, null);
     return;
   }
-  const dir = new THREE.Vector3().subVectors(state.aimEnd, state.aimStart);
-  if (dir.length() <= 0.5) {
-    predLine.visible = false;
-    impactMarker.visible = false;
-    return;
-  }
-  dir.normalize();
 
+  const { dirX, dirY, dirZ, baseV } = ls;
   const speedKm = parseFloat(document.getElementById('speed').value);
   const v = speedKm * 1000;
   const massExp = parseFloat(document.getElementById('mass').value);
   const mass = Math.pow(10, massExp);
-  const baseVx = focusBody ? focusBody.vx : 0;
-  const baseVy = focusBody ? focusBody.vy : 0;
-  const baseVz = focusBody ? focusBody.vz : 0;
   const proto = {
-    px: state.aimStart.x * RENDER_SCALE, py: state.aimStart.y * RENDER_SCALE, pz: state.aimStart.z * RENDER_SCALE,
-    vx: dir.x * v + baseVx, vy: dir.y * v + baseVy, vz: dir.z * v + baseVz, mass,
+    px: ls.spawnPxM, py: ls.spawnPyM, pz: ls.spawnPzM,
+    vx: baseV.vx + dirX * v, vy: baseV.vy + dirY * v, vz: baseV.vz + dirZ * v, mass,
   };
-  // Prediction step adapts to warp so the line looks reasonable far ahead.
-  const predDt = Math.max(3600, WARP_LEVELS[state.warpIdx].dt / 2);
-  const pred = predictTrajectory(proto, 600, predDt);
+  // Prediction step adapts so the line covers a useful slice of the future:
+  // ~62 days at warp 0 (1 min/s), ~20 years at warp 6+. predDt capped at
+  // 5 days/step — coarser would lose accuracy on Earth-Moon-scale curves.
+  const warpDt = WARP_LEVELS[state.warpIdx].dt;
+  const predDt = Math.max(3600, Math.min(86400 * 5, warpDt));
+  const pred = predictTrajectory(proto, PRED_CAPACITY, predDt);
 
   const arr = predLine.geometry.attributes.position.array;
   for (let i = 0; i < pred.path.length; i++) {
@@ -251,7 +292,7 @@ export function updateAimVisual(focusBody = null) {
     impactMarker.visible = false;
   }
 
-  fillAimPanel(focusBody, pred.impactIdx, pred.path[pred.path.length - 1]);
+  fillAimPanel(spawnRender, target, pred.impactIdx, ls);
 }
 
 // --- impact analysis ---
