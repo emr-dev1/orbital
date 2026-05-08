@@ -6,7 +6,7 @@ import { WARP_LEVELS, NAV_ORDER, NAV_DIST, AU } from './data.js';
 import { buildSolarSystem } from './physics.js';
 import { rebuildVisuals, trailLines, labelDivs, renderPos } from './visuals.js';
 import { camState } from './camera.js';
-import { setAimMode } from './asteroid.js';
+import { setAimMode, fireAsteroid } from './asteroid.js';
 
 const warpEl     = document.getElementById('warp');
 const warpLabel  = document.getElementById('warpLabel');
@@ -77,6 +77,15 @@ labelsBtn.onclick = () => {
   for (const d of labelDivs.values()) d.style.display = state.showLabels ? '' : 'none';
 };
 aimBtn.onclick = () => setAimMode(!state.aimMode, camState.focusBody);
+
+const fireBtn = document.getElementById('fireBtn');
+const cancelAimBtn = document.getElementById('cancelAimBtn');
+fireBtn.onclick = () => {
+  if (!state.aimMode || !state.aimStart || !state.aimEnd) return;
+  fireAsteroid(state.aimStart, state.aimEnd, camState.focusBody);
+  setAimMode(false);
+};
+cancelAimBtn.onclick = () => setAimMode(false);
 
 closeImpactBtn.onclick = () => {
   document.getElementById('impactModal').classList.remove('show');
@@ -162,6 +171,9 @@ window.addEventListener('keydown', e => {
       if (helpOverlay.classList.contains('show')) toggleHelp(false);
       else if (state.aimMode) setAimMode(false);
       else document.getElementById('impactModal').classList.remove('show');
+      break;
+    case 'Enter':
+      if (state.aimMode) { e.preventDefault(); fireBtn.click(); }
       break;
     case 'Comma':
       // step warp down

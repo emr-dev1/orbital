@@ -22,43 +22,54 @@
   </div>
 </div>
 
-<div class="hud panel left">
-  <h3>CONTROLS</h3>
+<div class="hud stack-left">
+  <div class="panel">
+    <h3>CONTROLS</h3>
 
-  <div class="ctrl">
-    <label>TIME WARP <span class="val" id="warpLabel">1× (1 day/s)</span></label>
-    <input type="range" id="warp" min="0" max="9" step="1" value="3">
-  </div>
+    <div class="ctrl">
+      <label>TIME WARP <span class="val" id="warpLabel">1× (1 day/s)</span></label>
+      <input type="range" id="warp" min="0" max="9" step="1" value="3">
+    </div>
 
-  <div class="ctrl">
-    <label>ASTEROID MASS <span class="val" id="massLabel">10¹² kg</span></label>
-    <input type="range" id="mass" min="6" max="25" step="0.5" value="12">
-  </div>
+    <div class="ctrl">
+      <label>ASTEROID MASS <span class="val" id="massLabel">10¹² kg</span></label>
+      <input type="range" id="mass" min="6" max="25" step="0.5" value="12">
+    </div>
 
-  <div class="ctrl">
-    <label>LAUNCH SPEED <span class="val" id="speedLabel">20 km/s</span></label>
-    <input type="range" id="speed" min="5" max="80" step="1" value="20">
-  </div>
+    <div class="ctrl">
+      <label>LAUNCH SPEED <span class="val" id="speedLabel">20 km/s</span></label>
+      <input type="range" id="speed" min="5" max="80" step="1" value="20">
+    </div>
 
-  <div class="ctrl">
-    <div class="row">
-      <button class="btn active" id="pauseBtn">PAUSE</button>
-      <button class="btn" id="resetBtn">RESET</button>
+    <div class="ctrl">
+      <div class="row">
+        <button class="btn active" id="pauseBtn">PAUSE</button>
+        <button class="btn" id="resetBtn">RESET</button>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <div class="row">
+        <button class="btn" id="aimBtn">+ ASTEROID</button>
+        <button class="btn danger" id="clearBtn">CLEAR DEBRIS</button>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <div class="row">
+        <button class="btn" id="trailsBtn">TRAILS</button>
+        <button class="btn" id="labelsBtn">LABELS</button>
+        <button class="btn" id="helpBtn">?</button>
+      </div>
     </div>
   </div>
 
-  <div class="ctrl">
-    <div class="row">
-      <button class="btn" id="aimBtn">+ ASTEROID</button>
-      <button class="btn danger" id="clearBtn">CLEAR DEBRIS</button>
-    </div>
-  </div>
-
-  <div class="ctrl">
-    <div class="row">
-      <button class="btn" id="trailsBtn">TRAILS</button>
-      <button class="btn" id="labelsBtn">LABELS</button>
-      <button class="btn" id="helpBtn">?</button>
+  <div class="panel nav-dock" id="navDock">
+    <h3>GO TO</h3>
+    <div class="nav-grid" id="navGrid"></div>
+    <div class="nav-grid" style="margin-top:6px;">
+      <button class="btn" id="overviewBtn">OVERVIEW</button>
+      <button class="btn" id="freeCamBtn">FREE CAM</button>
     </div>
   </div>
 </div>
@@ -74,14 +85,22 @@
   <div class="readout"><span class="k">DT · STEPS</span><span class="v" id="dtval">— s</span></div>
 </div>
 
-<div class="aim-hint" id="aimHint">HOVER A TARGET · CLICK TO FIRE · ESC TO CANCEL</div>
-
-<div class="hud nav-dock panel" id="navDock">
-  <h3>GO TO</h3>
-  <div class="nav-grid" id="navGrid"></div>
-  <div class="nav-grid" style="margin-top:6px;">
-    <button class="btn" id="overviewBtn">OVERVIEW</button>
-    <button class="btn" id="freeCamBtn">FREE CAM</button>
+<div class="aim-panel" id="aimPanel">
+  <div class="aim-header">
+    <span class="aim-title">⌬ AIM</span>
+    <span class="aim-subtitle">SET TARGET · FIRE TO LAUNCH</span>
+  </div>
+  <div class="aim-grid">
+    <div class="aim-stat"><span class="k">TARGET</span><span class="v target" id="aimTargetV">—</span></div>
+    <div class="aim-stat"><span class="k">DISTANCE</span><span class="v" id="aimDistV">— Gm</span></div>
+    <div class="aim-stat"><span class="k">REL VEL</span><span class="v" id="aimVelV">— km/s</span></div>
+    <div class="aim-stat"><span class="k">ETA</span><span class="v" id="aimEtaV">—</span></div>
+    <div class="aim-stat"><span class="k">IMPACT YIELD</span><span class="v" id="aimImpactV">—</span></div>
+    <div class="aim-stat"><span class="k">VERDICT</span><span class="v" id="aimVerdictV">—</span></div>
+  </div>
+  <div class="aim-actions">
+    <button class="btn fire" id="fireBtn">⌬ FIRE</button>
+    <button class="btn" id="cancelAimBtn">CANCEL</button>
   </div>
 </div>
 
@@ -133,7 +152,8 @@
     <div class="row-help"><span class="k"><kbd>,</kbd> / <kbd>.</kbd></span><span class="v">WARP DOWN / UP</span></div>
     <div class="row-help"><span class="k"><kbd>R</kbd></span><span class="v">RESET WORLD</span></div>
     <div class="row-help"><span class="k"><kbd>X</kbd></span><span class="v">CLEAR DEBRIS</span></div>
-    <div class="row-help"><span class="k"><kbd>N</kbd></span><span class="v">+ ASTEROID — HOVER · CLICK TO FIRE</span></div>
+    <div class="row-help"><span class="k"><kbd>N</kbd></span><span class="v">+ ASTEROID (AIM MODE)</span></div>
+    <div class="row-help"><span class="k"><kbd>ENTER</kbd></span><span class="v">FIRE — WHILE AIMING</span></div>
   </div>
 
   <div class="group">

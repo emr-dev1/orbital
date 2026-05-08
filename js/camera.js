@@ -7,7 +7,6 @@ import * as THREE from 'three';
 import { camera, canvas } from './scene.js';
 import { state } from './state.js';
 import { bodySpinners, renderPos } from './visuals.js';
-import { setAimMode, fireAsteroid } from './asteroid.js';
 
 export const camState = {
   target: new THREE.Vector3(0, 0, 0),
@@ -104,12 +103,11 @@ let dragging = false, lastX = 0, lastY = 0;
 
 canvas.addEventListener('mousedown', e => {
   if (state.aimMode) {
-    // Aim mode is now click-to-fire. The launchpad position is auto-computed
-    // and updated in updateAimVisual; the mouse position drives the target.
-    if (state.aimStart && state.aimEnd) {
-      fireAsteroid(state.aimStart, state.aimEnd, camState.focusBody);
-      setAimMode(false);
-    }
+    // Click in aim mode = lock the target at the click point. Mouse hover
+    // also keeps it in sync, but a deliberate click feels right and gives
+    // the user something definite to do besides hover. The actual launch is
+    // a separate FIRE button click in the aim panel.
+    state.aimEnd = pickWorldPoint(e.clientX, e.clientY);
     return;
   }
   dragging = true; lastX = e.clientX; lastY = e.clientY;

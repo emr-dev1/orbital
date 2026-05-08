@@ -76,8 +76,76 @@ export function setAimMode(on, focusBody = null) {
     impactMarker.visible = false;
   }
   document.getElementById('aimBtn').classList.toggle('active', on);
-  document.getElementById('aimHint').classList.toggle('show', on);
+  document.getElementById('aimPanel').classList.toggle('show', on);
   canvas.style.cursor = on ? 'crosshair' : 'grab';
+}
+
+// Fill the live AIM panel readouts: nearest-body target, distance, ETA at
+// current slider speed, kinetic energy at impact (rough estimate using slider
+// speed as relative velocity), and a damage verdict. Called each frame from
+// updateAimVisual when aim mode is active.
+function fillAimPanel(focusBody, predImpactIdx, predLastPoint) {
+  if (!state.aimMode || !state.aimStart || !state.aimEnd) return;
+
+  // Nearest body to aim point — capture only when the cursor is reasonably
+  // close so floating-around-empty-space reads as "FREE POINT".
+  let nearest = null, nearestD = Infinity;
+  for (const b of state.bodies) {
+    const [bx, , bz] = renderPos(b);
+    const dx = bx - state.aimEnd.x;
+    const dz = bz - state.aimEnd.z;
+    const d  = Math.hypot(dx, dz);
+    const cap = Math.max(visualRadius(b) * 1.8, 1.0);
+    if (d < cap && d < nearestD) { nearestD = d; nearest = b; }
+  }
+  document.getElementById('aimTargetV').textContent = nearest ? nearest.name : 'FREE POINT';
+
+  // Render-space distance from launchpad to current target → physical units.
+  const ddx = (state.aimEnd.x - state.aimStart.x) * RENDER_SCALE;
+  const ddy = (state.aimEnd.y - state.aimStart.y) * RENDER_SCALE;
+  const ddz = (state.aimEnd.z - state.aimStart.z) * RENDER_SCALE;
+  const distM = Math.hypot(ddx, ddy, ddz);
+  document.getElementById('aimDistV').textContent =
+    distM < 1e9 ? (distM/1e6).toFixed(1) + ' Mm' : (distM/1e9).toFixed(2) + ' Gm';
+
+  // Slider-derived numbers
+  const speedKm = parseFloat(document.getElementById('speed').value);
+  document.getElementById('aimVelV').textContent = speedKm.toFixed(0) + ' km/s';
+
+  const v = speedKm * 1000;
+  const etaSec = distM / v;
+  document.getElementById('aimEtaV').textContent =
+    etaSec < 7200       ? (etaSec/60).toFixed(0)   + ' min' :
+    etaSec < 86400 * 2  ? (etaSec/3600).toFixed(1) + ' hr'  :
+    etaSec < 86400 * 60 ? (etaSec/86400).toFixed(1)+ ' d'   :
+                          (etaSec/86400/365).toFixed(2)+ ' yr';
+
+  const massExp = parseFloat(document.getElementById('mass').value);
+  const mass = Math.pow(10, massExp);
+  const E = 0.5 * mass * v * v;
+  const TNT_t  = E / TNT_J;
+  const TNT_Mt = TNT_t / 1e6;
+  document.getElementById('aimImpactV').textContent =
+    TNT_Mt < 1e-3 ? TNT_t.toExponential(1) + ' t' : TNT_Mt.toExponential(1) + ' Mt';
+
+  const verdictEl = document.getElementById('aimVerdictV');
+  let verdict, hot;
+  if (!nearest)               { verdict = 'NO TARGET'; hot = 'miss'; }
+  else if (predImpactIdx < 0) { verdict = 'WILL MISS';  hot = 'miss'; }
+  else if (TNT_Mt < 0.01)     { verdict = 'AIRBURST';   hot = '';     }
+  else if (TNT_Mt < 50)       { verdict = 'CITY-KILLER';hot = 'warn'; }
+  else if (TNT_Mt < 1e5)      { verdict = 'CONTINENTAL';hot = 'warn'; }
+  else if (TNT_Mt < 1e8)      { verdict = 'EXTINCTION'; hot = 'target'; }
+  else                        { verdict = 'PLANET-CRACKER'; hot = 'target'; }
+  verdictEl.textContent = verdict;
+  verdictEl.className = 'v ' + hot;
+
+  // Disable FIRE button when there's no actual target to hit (no path or no
+  // body in the prediction's collision check). The asteroid still fires —
+  // we just visually flag it as a miss so the user knows.
+  const fireBtn = document.getElementById('fireBtn');
+  if (predImpactIdx < 0 && !nearest) fireBtn.classList.add('miss');
+  else fireBtn.classList.remove('miss');
 }
 
 // When focusBody is provided, slider speed is interpreted as Δv RELATIVE TO
@@ -182,6 +250,8 @@ export function updateAimVisual(focusBody = null) {
   } else {
     impactMarker.visible = false;
   }
+
+  fillAimPanel(focusBody, pred.impactIdx, pred.path[pred.path.length - 1]);
 }
 
 // --- impact analysis ---

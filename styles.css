@@ -49,15 +49,30 @@ canvas { display: block; cursor: crosshair; }
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 16px 18px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 18px 20px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  transition: border-color 200ms ease;
 }
+.panel:hover { border-color: var(--line-strong); }
 
-.left {
+/* Left-side flex column. Panels stack and grow naturally so adding rows
+   to CONTROLS won't push the nav dock into other panels. */
+.stack-left {
   top: 90px; left: 16px;
   width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
+.stack-left::-webkit-scrollbar { width: 4px; }
+.stack-left::-webkit-scrollbar-thumb { background: var(--line-strong); }
+.stack-left::-webkit-scrollbar-track { background: transparent; }
 .panel h3 {
   font-size: 10px; letter-spacing: 0.32em; color: var(--dim);
   font-weight: 500; margin-bottom: 12px;
@@ -92,12 +107,18 @@ canvas { display: block; cursor: crosshair; }
   flex: 1; background: transparent; color: var(--text);
   border: 1px solid var(--line-strong);
   font-family: inherit; font-size: 10px; letter-spacing: 0.18em;
-  padding: 8px 6px; cursor: pointer;
+  padding: 9px 6px; cursor: pointer;
   text-transform: uppercase;
-  transition: all 120ms;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
-.btn:hover { border-color: var(--accent); color: var(--accent); }
-.btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.btn:hover {
+  border-color: var(--accent); color: var(--accent);
+  box-shadow: 0 0 14px rgba(255,85,48,0.22);
+}
+.btn.active {
+  background: var(--accent); color: var(--bg); border-color: var(--accent);
+  box-shadow: 0 0 14px rgba(255,85,48,0.3);
+}
 .btn.danger { color: var(--accent); border-color: rgba(255,85,48,0.4); }
 .btn.danger:hover { background: var(--accent); color: var(--bg); }
 
@@ -133,10 +154,8 @@ canvas { display: block; cursor: crosshair; }
   margin: 0 2px;
 }
 
-/* NAV DOCK — go-to-planet menu, right-side stack under telemetry */
+/* NAV DOCK — child of stack-left, no fixed positioning needed. */
 .nav-dock {
-  top: 360px; right: 16px;
-  width: 260px;
   padding: 14px 18px;
 }
 .nav-grid {
@@ -206,6 +225,84 @@ canvas { display: block; cursor: crosshair; }
 }
 .impact-modal .close {
   margin-top: 18px; width: 100%;
+}
+
+/* AIM PANEL — bottom-centre, only visible while aim mode is active */
+.aim-panel {
+  position: fixed;
+  bottom: 16px; left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  padding: 16px 20px;
+  z-index: 11;
+  pointer-events: auto;
+  display: none;
+  background: var(--panel);
+  border: 1px solid rgba(255,85,48,0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 24px rgba(255,85,48,0.08);
+  animation: aim-fade-in 220ms cubic-bezier(.2,.9,.3,1.2);
+}
+.aim-panel.show { display: block; }
+@keyframes aim-fade-in {
+  from { transform: translate(-50%, 6px); opacity: 0; }
+  to   { transform: translate(-50%, 0);   opacity: 1; }
+}
+.aim-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+.aim-title {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 18px; color: var(--accent);
+  letter-spacing: 0.18em;
+}
+.aim-subtitle {
+  font-size: 9px; color: var(--dim); letter-spacing: 0.32em;
+}
+.aim-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 24px;
+  margin-bottom: 14px;
+}
+.aim-stat { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.aim-stat .k {
+  font-size: 9px; color: var(--dim);
+  letter-spacing: 0.22em; text-transform: uppercase;
+}
+.aim-stat .v {
+  font-size: 13px; color: var(--text); font-weight: 500;
+  letter-spacing: 0.04em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.aim-stat .v.target { color: var(--accent); }
+.aim-stat .v.warn   { color: var(--warn); }
+.aim-stat .v.miss   { color: var(--dim); }
+.aim-actions { display: flex; gap: 8px; }
+.btn.fire {
+  flex: 3;
+  background: var(--accent); color: var(--bg);
+  border-color: var(--accent);
+  font-size: 12px; letter-spacing: 0.24em; font-weight: 600;
+  padding: 12px 6px;
+  box-shadow: 0 0 18px rgba(255,85,48,0.25);
+  transition: all 160ms ease;
+}
+.btn.fire:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 0 32px rgba(255,85,48,0.55);
+  transform: translateY(-1px);
+}
+.btn.fire:active { transform: translateY(0); }
+.btn.fire:disabled {
+  background: transparent; color: var(--dim);
+  border-color: var(--line-strong);
+  box-shadow: none; cursor: not-allowed;
+  filter: none;
 }
 
 /* AIM CROSSHAIR overlay text */
