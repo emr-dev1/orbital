@@ -209,6 +209,56 @@ freeCamBtn.onclick = () => {
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
 };
 
+// =====================================================================
+// VIEW PRESETS — angle / zoom / scene
+// =====================================================================
+// Angle buttons modify pitch only — keeps current focus & zoom so users
+// can flip "TOP" then "3D" without losing their place.
+function setAngle(pitchRad) {
+  camState.pitch = pitchRad;
+  // Pitch is read directly each frame, no goal tween. Snap is intentional
+  // — feels like an editor camera switch.
+}
+document.getElementById('angleTopBtn').onclick  = () => setAngle(-1.45);   // ~83° down
+document.getElementById('angle3dBtn').onclick   = () => setAngle(-0.40);   // default tilt
+document.getElementById('angleSideBtn').onclick = () => setAngle(-0.05);   // edge-on, slight tilt
+
+// Zoom buttons modify targetDist only — keeps focus and angle untouched
+// so a user can dial in a body, then toggle the surrounding context.
+function setZoom(dist) { camState.targetDist = dist; }
+document.getElementById('zoomInnerBtn').onclick = () => setZoom(280);   // Mercury–Mars
+document.getElementById('zoomBeltBtn').onclick  = () => setZoom(750);   // out to belt
+document.getElementById('zoomOuterBtn').onclick = () => setZoom(2800);  // out to Saturn/Uranus
+
+// Scene presets bundle focus + target + zoom + angle into one click.
+document.getElementById('sceneTopAllBtn').onclick = () => {
+  camState.focusBody = null;
+  camState.targetGoal.set(0, 0, 0);
+  camState.targetDist = 4500;
+  camState.pitch = -1.45;
+  camState.yaw = 0;
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+};
+document.getElementById('sceneEclipticBtn').onclick = () => {
+  // Edge-on view of the ecliptic — planets line up as a thin band.
+  camState.focusBody = null;
+  camState.targetGoal.set(0, 0, 0);
+  camState.targetDist = 600;
+  camState.pitch = 0;
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+};
+document.getElementById('sceneSunRelBtn').onclick = () => {
+  // Sun centered, default 3D angle, framing through Jupiter — good for
+  // watching inner-system orbits while the outer planets sweep around.
+  const sun = state.bodies.find(b => b.name === 'SUN');
+  camState.focusBody = sun || null;
+  camState.targetDist = 800;
+  camState.pitch = -0.4;
+  document.querySelectorAll('.nav-btn').forEach(el => {
+    el.classList.toggle('active', el.dataset.name === 'SUN');
+  });
+};
+
 // --- help overlay ---
 function toggleHelp(show) {
   if (show === undefined) show = !helpOverlay.classList.contains('show');

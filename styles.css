@@ -219,6 +219,26 @@ canvas { display: block; cursor: crosshair; }
 .nav-dock {
   padding: 14px 18px;
 }
+
+/* VIEW DOCK — angle/zoom/scene presets. Each row: a small left-aligned
+   label and a row of pill buttons that fill the remaining width. */
+.view-dock { padding: 14px 18px; }
+.view-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+}
+.view-row:last-child { margin-bottom: 0; }
+.view-label {
+  font-size: 9px; letter-spacing: 0.26em; color: var(--dim);
+  width: 44px; flex-shrink: 0;
+  text-transform: uppercase;
+}
+.view-pills {
+  display: flex; flex: 1; gap: 4px;
+}
+.view-pills .btn {
+  font-size: 9px; letter-spacing: 0.10em; padding: 7px 4px;
+}
 .nav-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
