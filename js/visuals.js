@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { state } from './state.js';
 import { scene, sunLight, labelLayer } from './scene.js';
-import { makePlanetTexture, makeGlowSprite, loadPhotoTexture } from './textures.js';
+import { makePlanetTexture, makeGlowSprite, loadPhotoTexture, makeRingTexture } from './textures.js';
 import { RENDER_SCALE, WARP_LEVELS } from './data.js';
 
 export const bodyMeshes   = new Map(); // body -> outer pivot (axis-tilt + position)
@@ -37,11 +37,53 @@ const ATMOSPHERES = {
 
 export function visualRadius(b) {
   if (b.name === 'SUN') return 18;
-  // Power-law compression so Moon, Mars, Earth, Jupiter all stay legible.
-  // Asteroids share the formula with a 0.3-unit floor so a 10⁶ kg pebble
-  // stays clickable while a 10²⁵ kg planet-killer renders at the right size.
-  const r = 2.0 * Math.pow(b.displayRadius / R_EARTH, 0.5);
-  return b.isAsteroid ? Math.max(0.3, r) : r;
+  // Black holes: real Schwarzschild radii would be invisible at our scale
+  // (a stellar BH is 30 km vs the Sun's 700,000). Log-scale the visible
+  // event horizon so a stellar BH reads as a small dark dot and a
+  // supermassive one looks Sun-sized.
+  if (b.isBlackHole) return Math.max(0.6, 0.45 * Math.log10(Math.max(b.mass, 1e29) / 1e29) + 0.6);
+  // Power-law compression: exponent 0.7 keeps Mercury / Mars / Earth / Jupiter
+  // all legible while preserving truer size ratios — Moon now reads as ~40%
+  // of Earth (was ~50%), Ganymede edges out Mercury, Titan towers over
+  // Enceladus the way it actually does.
+  const r = 2.0 * Math.pow(b.displayRadius / R_EARTH, 0.7);
+  // Floors: asteroids 0.3 (so a 10⁶ kg pebble stays clickable while threats
+  // read at the right size), small bodies 0.16 (Phobos/Deimos remain visible
+  // little dots without ballooning to look planet-sized).
+  if (b.isAsteroid) return Math.max(0.3, r);
+  return Math.max(0.16, r);
+}
+
+// Jagged "potato" geometry for asteroids. Built from a low-detail icosahedron
+// so each triangular face stays large enough to read as a distinct flat panel
+// under flatShading — gives the craggy crystalline look real asteroids have
+// (Itokawa, Bennu, Eros) instead of a smooth marble.
+//
+// Vertices are displaced along their radial direction by a deterministic
+// per-position hash so two siblings differ but a single asteroid keeps its
+// shape across rebuilds. Hashing by world-position (not vertex index) means
+// duplicate vertices that polyhedron geometries emit at face boundaries get
+// the same displacement, preventing cracks in the silhouette.
+function makeAsteroidGeometry(rVis, seed = 0) {
+  const geo = new THREE.IcosahedronGeometry(rVis, 1);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+    // Two-frequency hash on the unit direction: the low frequency gives the
+    // overall lumpy outline, the high frequency adds small-scale facet break-up.
+    const dx = v.x / rVis, dy = v.y / rVis, dz = v.z / rVis;
+    const h1 = Math.sin((dx * 12.989 + dy * 78.233 + dz * 37.719) * (1 + seed * 0.013) + seed * 0.7) * 43758.5453;
+    const h2 = Math.sin((dx * 41.317 + dy * 23.149 + dz * 91.412) * (1 + seed * 0.029) + seed * 1.3) * 12345.6789;
+    const r1 = (h1 - Math.floor(h1)) * 2 - 1;
+    const r2 = (h2 - Math.floor(h2)) * 2 - 1;
+    const factor = 1 + r1 * 0.30 + r2 * 0.10;     // ±~40% radius variation
+    v.normalize().multiplyScalar(rVis * Math.max(0.55, factor));
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();   // needed so lighting reflects the new shape
+  return geo;
 }
 
 // Render position (in render units). For bodies with a parent (moons),
@@ -71,20 +113,142 @@ export function rebuildVisuals() {
 
   for (const b of state.bodies) {
     const rVis = visualRadius(b);
-    const geo = new THREE.SphereGeometry(rVis, 48, 32);
 
-    let mat;
+    // ── Black hole: pure-black event horizon + glowing accretion disks ──
+    // Built as a small scene graph (pivot ▸ diskGroup ▸ {sphere, inner ring,
+    // outer ring}) so the disks rotate via the existing spinner machinery
+    // while the sphere stays still. Bodies don't get tilt or atmospheres.
+    if (b.isBlackHole) {
+      // Pure-black event horizon. Higher tessellation than planets so the
+      // silhouette stays smooth against bright disks behind it.
+      const horizon = new THREE.Mesh(
+        new THREE.SphereGeometry(rVis, 64, 48),
+        new THREE.MeshBasicMaterial({ color: 0x000000 }),
+      );
+
+      // Accretion disk: three flat ring layers, hottest in (yellow-white)
+      // → orange → red. Flat rings (not tori) so they read as a thin disk
+      // when viewed at glancing angles.
+      const diskGroup = new THREE.Group();   // rotates around its local Y
+      diskGroup.rotation.z = 0.20;            // slight tilt — disks are never perfectly aligned
+      const innerDisk = new THREE.Mesh(
+        new THREE.RingGeometry(rVis * 1.7, rVis * 2.4, 96),
+        new THREE.MeshBasicMaterial({
+          color: 0xffe080, transparent: true, opacity: 0.95,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      innerDisk.rotation.x = Math.PI / 2;
+      const midDisk = new THREE.Mesh(
+        new THREE.RingGeometry(rVis * 2.4, rVis * 3.4, 96),
+        new THREE.MeshBasicMaterial({
+          color: 0xff9038, transparent: true, opacity: 0.70,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      midDisk.rotation.x = Math.PI / 2;
+      const outerDisk = new THREE.Mesh(
+        new THREE.RingGeometry(rVis * 3.4, rVis * 5.2, 96),
+        new THREE.MeshBasicMaterial({
+          color: 0xff4020, transparent: true, opacity: 0.40,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      outerDisk.rotation.x = Math.PI / 2;
+      diskGroup.add(innerDisk, midDisk, outerDisk);
+
+      // Polar relativistic jets along the disk's spin axis (local +Y).
+      // Open-cone hollow geometry with additive blending reads as wispy
+      // violet plasma rather than solid metal.
+      const jetMat = new THREE.MeshBasicMaterial({
+        color: 0xc084ff, transparent: true, opacity: 0.45,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const jetGeo = new THREE.ConeGeometry(rVis * 0.40, rVis * 6.5, 18, 1, true);
+      const jetUp = new THREE.Mesh(jetGeo, jetMat);
+      jetUp.position.y = rVis * 3.25;          // base at origin, tip up
+      const jetDown = new THREE.Mesh(jetGeo.clone(), jetMat);
+      jetDown.position.y = -rVis * 3.25;       // base at origin, tip down
+      jetDown.rotation.x = Math.PI;
+      diskGroup.add(jetUp, jetDown);
+
+      // Photon ring — sprite that always faces the camera. This is the
+      // bright halo Einstein-ring observers see; using a Sprite means it
+      // tracks the viewer correctly without any special update code.
+      const photonRingSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: makeRingTexture(),
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        color: 0xffe0a0,
+      }));
+      photonRingSprite.scale.set(rVis * 3.6, rVis * 3.6, 1);
+
+      // Soft outer glow so the BH bleeds light into nearby space — sells
+      // the gravitational presence even when the disk is edge-on.
+      const halo = makeGlowSprite(0xc070ff, rVis * 14, 0.30);
+
+      const pivot = new THREE.Group();
+      pivot.add(horizon, diskGroup, photonRingSprite, halo);
+      scene.add(pivot);
+
+      bodyMeshes.set(b, pivot);
+      bodySpinners.set(b, diskGroup);   // syncBodyVisuals spins this group
+
+      // Trail line — same as other bodies so the BH path is visible.
+      const tg = new THREE.BufferGeometry();
+      tg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(b.trailMax * 3), 3));
+      const tm = new THREE.LineBasicMaterial({
+        color: 0xff6030, transparent: true, opacity: 0.85,
+      });
+      const line = new THREE.Line(tg, tm);
+      line.frustumCulled = false;
+      if (!state.showTrails) line.visible = false;
+      scene.add(line);
+      trailLines.set(b, line);
+
+      // Label.
+      const div = document.createElement('div');
+      div.textContent = b.name;
+      Object.assign(div.style, {
+        position: 'absolute',
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: '9px', letterSpacing: '0.18em',
+        color: '#ff5530',
+        transform: 'translate(8px, -50%)',
+        whiteSpace: 'nowrap', textShadow: '0 0 6px #000',
+      });
+      if (!state.showLabels) div.style.display = 'none';
+      labelLayer.appendChild(div);
+      labelDivs.set(b, div);
+      continue;
+    }
+
+    let geo, mat;
     if (b.isAsteroid) {
+      // Seed jaggedness from mass + a stable per-body name-hash so each
+      // asteroid keeps a unique silhouette across rebuilds without globally
+      // re-randomising on every impact.
+      const nameHash = b.name ? Array.from(b.name).reduce((h, c) => h * 31 + c.charCodeAt(0), 7) : 0;
+      const seed = (Math.log10(Math.max(b.mass, 1)) * 11 + nameHash * 0.13) % 100;
+      geo = makeAsteroidGeometry(rVis, seed);
       mat = new THREE.MeshStandardMaterial({
         color: b.color, roughness: 0.95, metalness: 0.1, emissive: 0x442200,
+        flatShading: true,        // each face shaded as a hard plane → craggy
       });
     } else if (b.glow) {
+      geo = new THREE.SphereGeometry(rVis, 48, 32);
       // Sun: BasicMaterial so the texture stays bright regardless of lighting.
       const proc = makePlanetTexture(b.name, b.color);
       mat = new THREE.MeshBasicMaterial({ map: proc, color: 0xffffff });
       // Async-upgrade to NASA-style photo once it loads.
       loadPhotoTexture(b.name, (tex) => { mat.map = tex; mat.needsUpdate = true; });
     } else {
+      geo = new THREE.SphereGeometry(rVis, 48, 32);
       const proc = makePlanetTexture(b.name, b.color);
       mat = new THREE.MeshStandardMaterial({
         map: proc, roughness: 0.85, metalness: 0.05,
@@ -169,16 +333,30 @@ export function rebuildVisuals() {
   }
 }
 
-// Per-frame: position pivots, spin meshes, push trail vertices.
-export function syncBodyVisuals(realDt) {
+// Per-frame: position pivots, spin meshes, push trail vertices. focusBody
+// — when provided — gets a tighter spin clamp so the user can actually
+// watch animations on the body they're staring at, regardless of warp.
+export function syncBodyVisuals(realDt, focusBody = null) {
   // Pause means pause: no orbital advance, no axial spin, no asteroid tumble.
   const rotDt = state.paused ? 0 : (WARP_LEVELS[state.warpIdx].dt * realDt);
+  // Cap spin per-frame: the focused body slows to a readable ~1 RPM, others
+  // can run faster up to MAX_ROT_PER_FRAME.
+  const FOCUS_CAP = 0.02;
 
   for (const b of state.bodies) {
     const pivot = bodyMeshes.get(b); if (!pivot) continue;
     const [rx, ry, rz] = renderPos(b);
     pivot.position.set(rx, ry, rz);
     if (b.name === 'SUN') sunLight.position.copy(pivot.position);
+
+    // Tidally drained body: shrink the pivot to telegraph mass loss as it
+    // gets shredded by a nearby black hole. originalMass is only seeded by
+    // the tidal-stream module when a body enters a BH's tidal zone, so
+    // unaffected bodies stay at scale 1.
+    if (b.originalMass && b.mass < b.originalMass && !b.isBlackHole) {
+      const ratio = Math.max(0.05, b.mass / b.originalMass);
+      pivot.scale.setScalar(Math.cbrt(ratio));
+    }
 
     const spinner = bodySpinners.get(b);
     if (spinner && b.tidallyLocked && b.parent) {
@@ -203,9 +381,10 @@ export function syncBodyVisuals(realDt) {
       // Sun is a featureless glow — don't boost its already-slow spin.
       // Everything else gets the visual boost so axial rotation is legible.
       const visualPeriod = b.name === 'SUN' ? b.rotPeriod * 8 : b.rotPeriod / VISUAL_SPIN_BOOST;
+      const cap = (b === focusBody) ? FOCUS_CAP : MAX_ROT_PER_FRAME;
       let dRot = (2 * Math.PI * rotDt) / visualPeriod;
-      if (dRot >  MAX_ROT_PER_FRAME) dRot =  MAX_ROT_PER_FRAME;
-      else if (dRot < -MAX_ROT_PER_FRAME) dRot = -MAX_ROT_PER_FRAME;
+      if (dRot >  cap) dRot =  cap;
+      else if (dRot < -cap) dRot = -cap;
       spinner.rotation.y += dRot;
     } else if (spinner && b.isAsteroid) {
       spinner.rotation.y += 0.02;

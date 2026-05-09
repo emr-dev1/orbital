@@ -168,6 +168,11 @@ export const COMPOSITIONS = {
   ICY:          { density: 1500, waterFraction: 0.6,  color: 0xa0d8ff, label: 'ICY'          },
   IRON:         { density: 7800, waterFraction: 0,    color: 0xa39a8a, label: 'IRON'         },
   CARBONACEOUS: { density: 2200, waterFraction: 0.10, color: 0x6b5e4a, label: 'CARBONACEOUS' },
+  // Black hole — handled specially by fireAsteroid + visuals.js. Density
+  // here is nominal (real BH "density" depends on mass); the actual rendered
+  // size and physics radius come from the Schwarzschild formula r_s = 2GM/c².
+  BLACKHOLE:    { density: 1e18, waterFraction: 0,    color: 0x000000, label: 'BLACK HOLE',
+                  isBlackHole: true },
 };
 
 // Famous-body presets for the LAUNCH panel. Mass + composition are real;
@@ -188,6 +193,8 @@ export const ASTEROID_CATALOG = [
     notes: 'DWARF PLANET · 25% WATER ICE · LARGEST BELT BODY' },
   { name: 'THEIA',     mass: 6.4e23, composition: 'ROCKY',        dv: 10, target: 'EARTH',
     notes: 'HYPOTHETICAL MARS-MASS · MOON-FORMING IMPACT (4.5 GYR AGO)' },
+  // Black-hole presets live in the dedicated BH FORGE panel
+  // (`+ BLACK HOLE` button) — they don't belong in the asteroid catalog.
 ];
 
 // Per-body descriptors for the BODY INSPECTOR panel. Static reference values

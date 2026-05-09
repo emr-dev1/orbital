@@ -4,50 +4,84 @@ Browser-based n-body solar system sandbox. No build step. Open `index.html` in a
 
 ## What it does
 
-- Simulates the Sun, eight planets, and the Moon with **velocity Verlet** integration in SI units.
-- Procedural planet textures (Earth continents, Jupiter bands + Great Red Spot, Mars polar caps, Moon maria, Saturn rings) with correct axial tilt and rotation direction (Venus and Uranus retrograde).
+- Simulates the Sun, eight planets, the Moon, and 10+ major moons (Phobos/Deimos, the Galileans, Titan, Enceladus, Titania, Triton…) with **Yoshida 4th-order symplectic** integration in SI units.
+- **First post-Newtonian (1PN) correction** in the Sun's field — Mercury's perihelion advance falls out for free.
+- **Continuous collision detection** so a fast asteroid can't tunnel through a planet between substeps.
+- Procedural planet textures *and* async upgrade to NASA-style photo textures once they load (Earth, Jupiter, Mars, Saturn rings, etc.) with correct axial tilt and rotation direction (Venus and Uranus retrograde).
+- Atmospheric halos on Earth/Venus/Mars/giants and Titan, layered solar corona, real-time tidal locking on the Moon and major moons.
 - Time warp from 1 minute/sec up to 20 years/sec.
-- **Asteroid launches** — pick mass and velocity, drag in scene to aim, watch the predicted dashed trajectory, release to fire.
-- **Impact analysis** — relative velocity, kinetic energy, TNT-equivalent yield, crater diameter, reference event, and a verdict (city-killer through planet-cracker).
-- Camera dock + keyboard nav between bodies.
+- **Climate / biosphere / population evolution** — energy balance with ice-albedo feedback, dust-driven nuclear winter, CO₂ greenhouse, biosphere stages from STERILE → INTELLIGENT, logistic population growth.
+- **Asteroid launches** with mass + Δv sliders, composition pills (rocky / icy / iron / carbonaceous), famous-body catalog (Tunguska, Apophis, Bennu, Chicxulub, Ceres, Theia), dashed prediction line, and impact analysis (yield, crater diameter, reference event, verdict).
+- **Surface impact effects** — debris bursts, multi-stage shockwaves, surface flash, all anchored to the impact point in the spinner's local frame so they ride the planet's rotation correctly. Climate / biosphere / population react to the strike.
+- **Black holes** — dedicated forge with event-horizon / photon-sphere / ISCO readouts, tidal-disruption stream particles flowing from a doomed planet into the BH, mass transfer until consumption.
+- **Earth Mode** — Sun-paused cinematic Earth-centric view; pick from SOLAR FLARE / ICE AGE / ASTEROID with per-event tuning, watch a hyper-realistic animation play out while the right-side INSPECTOR tracks live stat changes.
+- **Random solar flare** button — fires a CME of random class at a randomly-picked target body with the full sequence: plasma cloud erupts from the Sun → bow shock at the magnetosphere → multi-color aurora curtains at the magnetic poles (green oxygen → red oxygen → violet nitrogen).
+- **Habitable zone overlay** — Goldilocks-zone rings around every star, scaled by √(L / L_sun), with conservative + optimistic edges.
+- **Body editor (MODIFY panel)** — focus a body, drag MASS and SIZE sliders, hit PREDICT to see dashed cyan trajectories showing how every other body's orbit reshapes over the next year under the new gravity.
+- Camera dock + keyboard nav, view presets (TOP / 3D / SIDE × INNER / BELT / OUTER × scene presets), live inspector with telemetry / classification / atmosphere / habitability / civilization / events log.
 
 ## Stack
 
 - Three.js (r128, via importmap CDN)
-- Plain ES modules — no bundler
+- Plain ES modules — no bundler, no TypeScript, no framework
 
 ## Run
 
 ```sh
-open index.html            # quickest
-python3 -m http.server 8000  # if you'd rather a local server
+open index.html              # quickest
+python3 -m http.server 8000  # local server, browse to localhost:8000
 ```
 
 ## Project layout
 
 ```
-index.html        markup + import map + script entry
-styles.css        all styling
+index.html              markup + import map + script entry
+styles.css              all styling (panels, HUD, modals, sliders)
 js/
-  data.js         constants and data tables (planets, warp, ref events, nav)
-  state.js        shared mutable state object
-  physics.js      Body, integrator, collisions, prediction, world build
-  textures.js     procedural canvas-painted planet textures + sun glow
-  scene.js        renderer, scene, camera, lights, starfield, label layer
-  visuals.js      body meshes/trails/labels + per-frame visual sync
-  camera.js       orbit-camera state, mouse + keyboard movement
-  asteroid.js     aim mode, prediction line, launch, impact modal
-  ui.js           DOM controls, nav dock, telemetry, keyboard shortcuts
-  main.js         init + tick loop
+  data.js               constants, planet/moon catalogs, compositions, body info
+  state.js              shared mutable state object
+  physics.js            Body, Yoshida-4 + 1PN integrator, CCD collisions, Kepler init
+  scene.js              renderer, scene, camera, lights, starfield, label layer
+  textures.js           procedural canvas planet textures + Sun glow + photo loader
+  visuals.js            body meshes / pivots / spinners / atmospheres / trails / labels
+  camera.js             orbit-camera state, mouse + keyboard, view presets
+  asteroid.js           aim mode, prediction line, launch, debris + shockwave + flash
+  asteroid_belt.js      main-belt sprinkle of background asteroids
+  evolution.js          climate / biosphere / population tick, impact effects
+  earth_mode.js         Earth-centric event mode (flare / ice age / asteroid)
+  solar_flare.js        global "fire a random CME" button + animations
+  habitable_zone.js     Goldilocks-zone overlay rings
+  body_editor.js        MODIFY panel — mass / size sliders + prediction lines
+  blackhole_ui.js       black hole forge panel
+  tidal_stream.js       tidal-disruption particle stream into a black hole
+  ui.js                 DOM controls, nav dock, telemetry, inspector, keyboard
+  main.js               init + tick loop
 ```
 
 ## Controls
 
 **Mouse**
 - Drag — orbit the camera
+- Middle drag — pan the look-at point (Shift = 2.5× speed)
 - Scroll — zoom
 - Click a body — focus and follow it
-- `+ ASTEROID` — enter aim mode, then click+drag in the scene to set the launch vector and release to fire
+- `+ ASTEROID` — enter aim mode, click empty space to place the launchpad, click a body to retarget, hit FIRE
+- `+ BLACK HOLE` — open the BH forge; tune mass / Δv, click in the scene to position, RELEASE SINGULARITY
+
+**Toggles** (left HUD)
+- `TRAILS` / `LABELS` — show body orbits / name labels
+- `HAB ZONE` — show the Goldilocks-zone rings around each star
+- `EARTH MODE` — enter the cinematic Earth-centric event view
+- `☀ SOLAR FLARE` — fire a random-class CME at a random target body
+
+**View presets** (left HUD)
+- `ANGLE`: TOP / 3D / SIDE
+- `ZOOM`: INNER / BELT / OUTER
+- `SCENE`: TOP·ALL / ECLIPTIC / SUN-REL
+
+**Inspector & MODIFY panel** (right HUD)
+- Click a body to populate the inspector with classification / orbital / atmosphere / habitability / civilization / events
+- The MODIFY panel below shows MASS and SIZE sliders for the focused body; PREDICT draws dashed prediction lines showing how every other body's orbit changes under the new gravity
 
 **Keyboard — held**
 - `W`/`A`/`S`/`D` or arrow keys — orbit
@@ -66,34 +100,36 @@ js/
 - `H` — hide / show HUD
 - `1`–`9`, `0` — jump to Sun, Mercury, …, Neptune
 - `O` — overview, `F` — free cam
-- `?` — toggle keyboard help, `Esc` — close help / cancel aim
+- `?` — toggle keyboard help, `Esc` — close help / cancel aim / exit Earth Mode
 
 ## Roadmap
 
-The fun stuff — open to PRs and cherry-picking.
+Built since v0.1 and still on the wishlist.
 
 ### Bodies & physics
-- [ ] **Black holes** — Schwarzschild approximation, accretion disk, screen-space gravitational lensing post-process
-- [ ] **Galactic scale** — switch the integrator to Barnes-Hut octree so we can handle ~10⁵ bodies; star cluster and galaxy presets
-- [ ] **Procedural moons + asteroid belts** — main belt, Trojans, Kuiper belt sprinkles
+- [x] **Black holes** — Schwarzschild approximation, tidal stream, event-horizon / photon-sphere / ISCO readouts
+- [ ] **Galactic scale** — switch to Barnes-Hut octree so we can handle ~10⁵ bodies; star cluster and galaxy presets
+- [x] **Procedural moons + asteroid belts** — main belt sprinkle, 10+ named moons
 - [ ] **Comet trails** — sublimation/ion tail when near the Sun, pointed away from it
-- [ ] **Tidal locking** — slowly drag rotation toward orbital period when within Roche distance; visualize libration
-- [ ] **Mass → rotation coupling** — collisions transfer angular momentum (impactor mass and impact-vector skew should change planet spin axis and rate). Ditto, dragging mass higher should affect orbits of bound moons.
-- [ ] **N-body presets** — binary star, three-body chaos, figure-8 orbit, Lagrange points
+- [x] **Tidal locking** — major moons present same face to their parent
+- [x] **Mass → rotation coupling** — collisions transfer angular momentum into target spin
+- [ ] **N-body presets** — binary star, three-body chaos, figure-8, Lagrange points
+- [x] **First post-Newtonian correction** — Mercury's perihelion advance
 
 ### Spacecraft & impactors
-- [ ] **Rocket launches** — low-thrust craft with delta-v budget, throttle, prograde/retrograde/normal burn directions, orbit insertion
+- [ ] **Rocket launches** — low-thrust craft with delta-v budget, throttle, prograde/retrograde/normal burn directions
 - [ ] **Mission planner** — Hohmann transfer assistant, gravity assists, porkchop plot
-- [ ] **Asteroid catalog** — Apophis, Bennu, Ceres with real orbital elements
+- [x] **Asteroid catalog** — Tunguska, Apophis, Bennu, Chicxulub, Ceres, Theia
 - [ ] **Kinetic deflection** — DART-style impactor with delta-v change readout
 
 ### Visualization
 - [ ] **Time-rewind / scrubbing** — keep a state ring buffer, allow scrubbing the timeline
+- [x] **Habitable-zone overlay**
 - [ ] **Lagrange-point overlay** — L1–L5 markers updated each frame
 - [ ] **Roche-limit and Hill-sphere overlays**
-- [ ] **Camera presets** — chase cam on asteroid, top-down ecliptic, behind-planet, sun-relative
-- [ ] **Atmospheric shells** — translucent halo around Earth/Venus/giant planets
-- [ ] **Real planet textures** option behind a flag (NASA imagery)
+- [x] **Camera presets** — angle / zoom / scene
+- [x] **Atmospheric shells** — translucent halo around Earth/Venus/giant planets, Titan haze
+- [x] **Real planet textures** — async-loaded NASA-style photos with procedural fallback
 
 ### Engine
 - [ ] **WebGPU renderer + GPU compute** for n-body forces — push body count up
@@ -102,10 +138,14 @@ The fun stuff — open to PRs and cherry-picking.
 - [ ] **Mobile / touch controls** — pinch-zoom, two-finger orbit, tap-and-hold for aim
 
 ### UX
-- [ ] **Body inspector** — click a body, see mass / radius / orbital elements / parent in a side panel; allow live editing
+- [x] **Body inspector** — click a body, see mass / radius / orbital elements / atmosphere / habitability / events
+- [x] **Live editing** — MODIFY panel with mass / size sliders + dashed prediction lines for every other body
+- [x] **Climate / biosphere / population evolution** — toy energy-balance + ice-albedo + dust + greenhouse + biosphere stages + logistic pop
+- [x] **Earth Mode** — cinematic Earth-centric event view with solar flare / ice age / asteroid
+- [x] **Hyper-realistic event animations** — CME plasma + bow shock + multi-color aurora curtains; ice-creep + storm-cloud shells; surface impact debris + shockwaves + flash
 - [ ] **Tutorial mode** — guided tour: launch an asteroid at Earth, deflect it, set up a Hohmann transfer
 - [ ] **Sound** — subtle ambient drone, impact thump, launch whoosh
 
 ## Status
 
-v0.1 — n-body sandbox.
+v0.2 — Earth Mode, black holes, body editor, full event animations.

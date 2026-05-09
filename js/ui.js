@@ -436,6 +436,47 @@ function renderInspector(body) {
 
   const sections = [];
 
+  // Black holes get a totally different inspector layout — no biosphere, no
+  // atmosphere, just gravitational properties + what they've eaten.
+  if (body.isBlackHole) {
+    const C_LIGHT_LOCAL = 299792458;
+    const SOLAR_MASS    = 1.989e30;
+    const rs   = (2 * 6.674e-11 * body.mass) / (C_LIGHT_LOCAL * C_LIGHT_LOCAL); // m
+    const isco = 3 * rs;
+    const photonSphere = 1.5 * rs;
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">CLASSIFICATION</div>
+      ${row('TYPE', 'BLACK HOLE')}
+    </div>`);
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">SCHWARZSCHILD METRICS</div>
+      ${row('MASS', body.mass.toExponential(3) + ' kg')}
+      ${row('SOLAR MASSES', (body.mass / SOLAR_MASS).toExponential(3) + ' M☉')}
+      ${row('EVENT HORIZON', rs < 1e3 ? rs.toFixed(0) + ' m' : rs < 1e6 ? (rs/1e3).toFixed(1) + ' km' : (rs/1e9).toFixed(3) + ' Gm')}
+      ${row('PHOTON SPHERE', (photonSphere/1e3).toFixed(1) + ' km')}
+      ${row('ISCO',          (isco/1e3).toFixed(1) + ' km')}
+    </div>`);
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">KINEMATICS</div>
+      <div class="ins-row" id="ins-dist"><span class="k">DIST FROM SUN</span><span class="v">— AU</span></div>
+      <div class="ins-row" id="ins-speed"><span class="k">VELOCITY</span><span class="v">— km/s</span></div>
+    </div>`);
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">ACCRETION</div>
+      ${row('ACCRETED', body.accretedCount || 0, body.accretedCount > 0 ? 'hot' : '')}
+    </div>`);
+    if (body.events && body.events.length) {
+      sections.push(`<div class="ins-section">
+        <div class="ins-section-title">EVENTS</div>
+        ${body.events.slice(0, 6).map(e =>
+          `<div class="ins-event"><span class="t">${formatEventTime(e.time)}</span><span class="d ${e.type === 'ACCRETION' ? 'hot' : ''}">${e.description}</span></div>`
+        ).join('')}
+      </div>`);
+    }
+    insBodyEl.innerHTML = sections.join('');
+    return;
+  }
+
   if (body.type) {
     sections.push(`<div class="ins-section">
       <div class="ins-section-title">CLASSIFICATION</div>

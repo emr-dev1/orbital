@@ -6,12 +6,18 @@ import { state } from './state.js';
 import { WARP_LEVELS, RENDER_SCALE, DT_MAX_SUBSTEP, MAX_SUBSTEPS_PER_FRAME } from './data.js';
 import { renderer, scene, camera } from './scene.js';
 import { buildSolarSystem, computeAccelerations, step, detectImpact, mergeImpact } from './physics.js';
-import { rebuildVisuals, syncBodyVisuals, updateLabels, bodyMeshes, trailLines, labelDivs } from './visuals.js';
+import { rebuildVisuals, syncBodyVisuals, updateLabels, bodyMeshes, trailLines, labelDivs, visualRadius } from './visuals.js';
 import { updateCamera, camState } from './camera.js';
-import { showImpact, updateAimVisual, spawnImpactDebris, updateImpactDebris } from './asteroid.js';
+import { updateAimVisual, spawnImpactDebris, updateImpactDebris } from './asteroid.js';
 import { buildAsteroidBelt, updateAsteroidBelt } from './asteroid_belt.js';
 import { markEvolvers, update as evolutionUpdate, reset as evolutionReset, applyImpactEffects } from './evolution.js';
 import { populateNavDock, updateTelemetry, getLaunchTarget } from './ui.js';
+import { initEarthModeUI, updateEarthMode } from './earth_mode.js';
+import { initBlackHoleUI, updateBlackHoleVisual } from './blackhole_ui.js';
+import { initSolarFlareUI, updateSolarFlares } from './solar_flare.js';
+import { updateTidalStreams } from './tidal_stream.js';
+import { initHabZoneUI, updateHabitableZones } from './habitable_zone.js';
+import { initBodyEditor, updateBodyEditor } from './body_editor.js';
 
 buildSolarSystem();
 computeAccelerations(state.bodies);
@@ -20,6 +26,11 @@ buildAsteroidBelt();
 markEvolvers();
 evolutionReset();
 populateNavDock();
+initEarthModeUI();
+initBlackHoleUI();
+initSolarFlareUI();
+initHabZoneUI();
+initBodyEditor();
 
 let lastFrameTime = performance.now();
 
@@ -44,16 +55,40 @@ function tick() {
       state.simTime += dt;
       const hit = detectImpact();
       if (hit) {
-        const [imp, tgt, ii, _jj, tImpact] = hit;
-        showImpact(imp, tgt);
+        let [imp, tgt, ii, jj, tImpact] = hit;
+        // Black holes always win. detectImpact returns the asteroid as
+        // `imp` and the planet as `tgt`, but if a BH is the launched body
+        // we want IT to survive and absorb the planet. Swap so mergeImpact
+        // (which kills `imp` and grows `tgt`) does the right thing.
+        if (imp.isBlackHole && !tgt.isBlackHole) {
+          [imp, tgt] = [tgt, imp];
+          [ii,  jj]  = [jj, ii];
+        }
+        // No modal popup — the inspector EVENTS log + on-screen animation
+        // (debris, shock waves, camera snap, ticking population counter)
+        // already tell the impact story without blocking the view.
         // Spawn a particle burst at the impact site BEFORE mergeImpact
-        // dissolves the impactor — uses the impactor's velocity to scatter.
-        spawnImpactDebris(imp, tgt);
+        // dissolves the impactor. tImpact pinpoints the actual contact
+        // location within the substep so the burst lands on the planet's
+        // surface, not at its centre. Skip surface shock waves when the
+        // survivor is a BH — there's no surface to ripple, just a void.
+        if (!tgt.isBlackHole) spawnImpactDebris(imp, tgt, tImpact);
         mergeImpact(imp, tgt, tImpact); // conserve mass + momentum + (axial) angular momentum
         applyImpactEffects(imp, tgt);    // climate / biosphere / population update
-        if (camState.focusBody === imp) {
-          camState.focusBody = tgt;
-        }
+        // Cinematic camera snap to the impact site: focus the target,
+        // pull in to ~3.5 visual radii, and orient yaw/pitch so the
+        // strike point sits in front of the camera at a 3/4 angle. The
+        // existing targetGoal lerp glides the move; yaw/pitch snap.
+        camState.focusBody = tgt;
+        camState.targetDist = visualRadius(tgt) * 3.5;
+        const idx = imp.px - tgt.px;
+        const idy = imp.py - tgt.py;
+        const idz = imp.pz - tgt.pz;
+        const horiz = Math.hypot(idx, idz) || 1;
+        camState.yaw = Math.atan2(idx, idz);
+        camState.pitch = Math.max(-1.4, Math.min(1.4,
+          Math.atan2(idy, horiz) + Math.PI / 8,
+        ));
         const m = bodyMeshes.get(state.bodies[ii]); if (m) scene.remove(m);
         const l = trailLines.get(state.bodies[ii]); if (l) scene.remove(l);
         const d = labelDivs.get(state.bodies[ii]);  if (d) d.remove();
@@ -89,10 +124,16 @@ function tick() {
   // Climate / biosphere / population — only when sim is running.
   if (!state.paused) evolutionUpdate();
 
-  syncBodyVisuals(realDt);
+  syncBodyVisuals(realDt, camState.focusBody);
+  updateTidalStreams(realDt);
   updateAsteroidBelt();
   updateImpactDebris(realDt);
+  updateEarthMode(realDt);
+  updateSolarFlares(realDt);
+  updateHabitableZones();
+  updateBodyEditor();
   updateAimVisual(getLaunchTarget());
+  updateBlackHoleVisual();
   updateLabels(camera);
   updateCamera(realDt);
   renderer.render(scene, camera);

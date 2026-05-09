@@ -33,7 +33,7 @@
 
     <div class="ctrl">
       <label>ASTEROID MASS <span class="val" id="massLabel">10¹² kg</span></label>
-      <input type="range" id="mass" min="6" max="25" step="0.5" value="12">
+      <input type="range" id="mass" min="6" max="40" step="0.5" value="12">
     </div>
 
     <div class="ctrl">
@@ -48,9 +48,30 @@
       </div>
     </div>
 
+    <!-- Three "summon" actions stacked vertically — each gets full width
+         so the special ones (BH, Earth Mode) read as full-strength CTAs. -->
     <div class="ctrl">
       <div class="row">
         <button class="btn" id="aimBtn">+ ASTEROID</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="row">
+        <button class="btn bh-open-btn" id="bhOpenBtn">⌬ + BLACK HOLE</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="row">
+        <button class="btn earth-mode-btn" id="earthModeBtn">⌬ EARTH MODE</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="row">
+        <button class="btn solar-flare-btn" id="solarFlareBtn">☀ SOLAR FLARE</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="row">
         <button class="btn danger" id="clearBtn">CLEAR DEBRIS</button>
       </div>
     </div>
@@ -59,6 +80,7 @@
       <div class="row">
         <button class="btn" id="trailsBtn">TRAILS</button>
         <button class="btn" id="labelsBtn">LABELS</button>
+        <button class="btn habzone-btn" id="habZoneBtn">HAB ZONE</button>
         <button class="btn" id="helpBtn">?</button>
       </div>
     </div>
@@ -71,6 +93,76 @@
       <button class="btn" id="overviewBtn">OVERVIEW</button>
       <button class="btn" id="freeCamBtn">FREE CAM</button>
     </div>
+  </div>
+
+  <div class="panel earth-panel" id="earthModePanel">
+    <div class="earth-head">
+      <div>
+        <div class="earth-title">EARTH MODE</div>
+        <div class="earth-sub" id="earthModeSub">SIM PAUSED · LIVE STATS RIGHT</div>
+      </div>
+      <button class="btn earth-exit" id="earthExitBtn">EXIT</button>
+    </div>
+
+    <div class="earth-section">
+      <div class="earth-section-title">EVENT</div>
+      <div class="event-radio" id="eventRadio">
+        <button class="event-btn active" data-evt="FLARE">
+          <span class="event-icon">☀</span>
+          <span class="event-label">SOLAR FLARE</span>
+        </button>
+        <button class="event-btn" data-evt="ICE">
+          <span class="event-icon">❄</span>
+          <span class="event-label">ICE AGE</span>
+        </button>
+        <button class="event-btn" data-evt="ASTEROID">
+          <span class="event-icon">⌬</span>
+          <span class="event-label">ASTEROID</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- SOLAR FLARE TUNING -->
+    <div class="earth-tune" id="tuneFlare">
+      <div class="earth-section-title">CLASS</div>
+      <div class="tune-pills" id="flareClass">
+        <button class="tune-pill" data-cls="M">M-CLASS</button>
+        <button class="tune-pill active" data-cls="X">X-CLASS</button>
+        <button class="tune-pill" data-cls="CARRINGTON">CARRINGTON</button>
+        <button class="tune-pill" data-cls="SUPERFLARE">SUPER</button>
+      </div>
+      <div class="earth-hint" id="flareHint">X-CLASS · GRID DAMAGE · MAJOR AURORA</div>
+    </div>
+
+    <!-- ICE AGE TUNING -->
+    <div class="earth-tune" id="tuneIce" style="display:none;">
+      <div class="ctrl">
+        <label>TEMPERATURE DROP <span class="val" id="iceTempLabel">-12 K</span></label>
+        <input type="range" id="iceTemp" min="2" max="30" step="1" value="12">
+      </div>
+      <div class="ctrl">
+        <label>DURATION <span class="val" id="iceDurLabel">2000 yr</span></label>
+        <input type="range" id="iceDur" min="100" max="10000" step="100" value="2000">
+      </div>
+      <div class="earth-hint" id="iceHint">MAJOR GLACIATION · 30-50% ICE COVER</div>
+    </div>
+
+    <!-- ASTEROID TUNING -->
+    <div class="earth-tune" id="tuneAsteroid" style="display:none;">
+      <div class="ctrl">
+        <label>MASS <span class="val" id="emMassLabel">10¹² kg</span></label>
+        <input type="range" id="emMass" min="6" max="25" step="0.5" value="12">
+      </div>
+      <div class="ctrl">
+        <label>SPEED <span class="val" id="emSpeedLabel">25 km/s</span></label>
+        <input type="range" id="emSpeed" min="5" max="80" step="0.5" value="25">
+      </div>
+      <div class="earth-section-title" style="margin-top:6px;">COMPOSITION</div>
+      <div class="tune-pills" id="emComposition"></div>
+      <div class="earth-hint" id="astHint">CITY-KILLER · REGIONAL DEVASTATION</div>
+    </div>
+
+    <button class="btn trigger-evt" id="triggerEventBtn">⌬ TRIGGER EVENT</button>
   </div>
 
   <div class="panel view-dock">
@@ -118,6 +210,31 @@
     <h3 id="insTitle">INSPECTOR</h3>
     <div id="insBody" class="ins-empty">CLICK A BODY TO INSPECT</div>
   </div>
+
+  <div class="panel modify-panel" id="modifyPanel">
+    <h3>MODIFY</h3>
+    <div class="ins-empty" id="modifyEmpty">FOCUS A BODY TO MODIFY</div>
+    <div id="modifyBody" style="display:none;">
+      <div class="modify-target" id="modifyTarget">—</div>
+      <div class="ctrl">
+        <label>MASS <span class="val" id="modMassLabel">1.00× ORIG</span></label>
+        <input type="range" id="modMassSlider" min="-2" max="3" step="0.05" value="0">
+        <div class="modify-stat" id="modMassAbs">—</div>
+      </div>
+      <div class="ctrl">
+        <label>SIZE <span class="val" id="modSizeLabel">1.00× ORIG</span></label>
+        <input type="range" id="modSizeSlider" min="-1" max="1" step="0.02" value="0">
+        <div class="modify-stat" id="modSizeAbs">—</div>
+      </div>
+      <div class="ctrl">
+        <div class="row">
+          <button class="btn" id="modPredictBtn">PREDICT</button>
+          <button class="btn danger" id="modResetBtn">RESET</button>
+        </div>
+      </div>
+      <div class="modify-hint" id="modifyHint">DASHED CYAN LINES SHOW PROJECTED PATHS</div>
+    </div>
+  </div>
 </div>
 
 <div class="aim-panel" id="aimPanel">
@@ -162,6 +279,79 @@
   <div class="legend" style="text-align:right;">
     GRAVITY · G = 6.674×10⁻¹¹ &nbsp;·&nbsp; FLOATING ORIGIN ON
   </div>
+</div>
+
+<!-- ===================================================================
+     BLACK HOLE FORGE — right-side dock for tuning + positioning a BH.
+     Scene stays interactive: click empty space to relocate the spawn,
+     click a body to retarget. Modal-overlay version was abandoned so
+     users can position the BH anywhere on the ecliptic.
+     =================================================================== -->
+<div class="bh-panel" id="bhPanel">
+  <div class="bh-header">
+    <div>
+      <div class="bh-title">SINGULARITY</div>
+      <div class="bh-sub">FORGE A BLACK HOLE · LAUNCH IT</div>
+    </div>
+    <button class="bh-close" id="bhCloseBtn">×</button>
+  </div>
+
+  <div class="bh-preview">
+    <div class="bh-preview-disk outer"></div>
+    <div class="bh-preview-disk mid"></div>
+    <div class="bh-preview-disk inner"></div>
+    <div class="bh-preview-horizon"></div>
+  </div>
+
+  <div class="bh-section">
+    <div class="bh-section-title">CLASS</div>
+    <div class="bh-class-pills" id="bhClassPills">
+      <button class="bh-pill" data-class="STELLAR">STELLAR</button>
+      <button class="bh-pill" data-class="INTERMEDIATE">INTERMEDIATE</button>
+      <button class="bh-pill" data-class="SUPERMASSIVE">SUPERMASSIVE</button>
+      <button class="bh-pill" data-class="ULTRAMASSIVE">ULTRAMASSIVE</button>
+    </div>
+  </div>
+
+  <div class="bh-section">
+    <div class="bh-section-title">MASS</div>
+    <input type="range" class="bh-slider" id="bhMass" min="29" max="42" step="0.5" value="31">
+    <div class="bh-mass-display">
+      <div class="bh-mass-main"><span id="bhMassKg">2e31</span> <span style="font-size:11px;color:var(--dim);letter-spacing:0.10em;">kg</span></div>
+      <div class="bh-mass-solar"><span id="bhMassSolar">10</span> M☉</div>
+    </div>
+    <div class="bh-class-label" id="bhClassLabel">STELLAR · X-RAY BINARY</div>
+  </div>
+
+  <div class="bh-section">
+    <div class="bh-section-title">SCHWARZSCHILD METRICS</div>
+    <div class="bh-metric"><span class="k">EVENT HORIZON</span><span class="v" id="bhRs">30 km</span></div>
+    <div class="bh-metric"><span class="k">PHOTON SPHERE</span><span class="v" id="bhPs">45 km</span></div>
+    <div class="bh-metric"><span class="k">ISCO</span><span class="v" id="bhIsco">90 km</span></div>
+    <div class="bh-metric"><span class="k">SCALE</span><span class="v" id="bhCompare">CITY-BLOCK</span></div>
+  </div>
+
+  <div class="bh-section">
+    <div class="bh-section-title">REAL-WORLD ANALOGUE</div>
+    <div class="bh-example" id="bhExample">CYGNUS X-1 · 21 M☉</div>
+  </div>
+
+  <div class="bh-section">
+    <div class="bh-section-title">TARGET</div>
+    <div class="bh-target-pills" id="bhTarget"></div>
+  </div>
+
+  <div class="bh-section">
+    <div class="bh-section-title">APPROACH Δv</div>
+    <input type="range" class="bh-slider" id="bhDv" min="0.5" max="50" step="0.1" value="5">
+    <div class="bh-mass-display">
+      <div class="bh-mass-main"><span id="bhDvVal">5.0</span> <span style="font-size:11px;color:var(--dim);">km/s</span></div>
+      <div class="bh-mass-solar">RELATIVE TO TARGET</div>
+    </div>
+  </div>
+
+  <button class="bh-fire" id="bhFireBtn">⌬ RELEASE SINGULARITY</button>
+  <button class="btn bh-cancel" id="bhCancelBtn">CANCEL</button>
 </div>
 
 <div class="impact-modal" id="impactModal">

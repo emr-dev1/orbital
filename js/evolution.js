@@ -202,6 +202,20 @@ export function reset() {
 // target's habitability state based on the impactor's mass, velocity, and
 // composition. Yield is in megatons TNT.
 export function applyImpactEffects(impactor, target) {
+  // Black hole accretion: no biosphere, no climate, no population — record
+  // what was eaten on the BH's events log and bail. mergeImpact has
+  // already added the impactor's mass and momentum to the BH.
+  if (target.isBlackHole) {
+    if (target.events === undefined) target.events = [];
+    if (target.accretedCount === undefined) target.accretedCount = 0;
+    target.accretedCount += 1;
+    target.events.unshift({
+      time: state.simTime, type: 'ACCRETION',
+      description: `ABSORBED ${impactor.name || 'BODY'} · +${(impactor.mass / 1.989e30).toExponential(2)} M☉`,
+    });
+    if (target.events.length > 10) target.events.length = 10;
+    return;
+  }
   if (!target.evolves && target.surfaceTemp === undefined) return;
   const dvx = impactor.vx - target.vx;
   const dvy = impactor.vy - target.vy;
@@ -249,18 +263,29 @@ export function applyImpactEffects(impactor, target) {
   }
 
   // Population kill — sigmoid on log10(Mt), 50% kill at ~10⁴ Mt.
+  // Stage the actual drain on a real-time animation roll instead of
+  // mutating the counter instantly, so the user sees it tick down over a
+  // few wall-clock seconds (asteroid.js _tickPopulationDrain does the
+  // draining each frame).
   if (target.population && target.population > 0) {
     const x = Math.log10(Math.max(Mt, 0.001)) - 4;
     const killFrac = 1 / (1 + Math.exp(-x * 1.6));
     const before = target.population;
-    target.population = Math.max(0, target.population * (1 - killFrac));
-    if (target.population < 1) target.population = 0;
+    const populationLost = before * killFrac;
     if (killFrac > 0.05) {
       target.events.unshift({
         time: state.simTime, type: 'CASUALTIES',
-        description: `${(killFrac*100).toFixed(0)}% POPULATION LOST · ${formatPop(before)} → ${formatPop(target.population)}`,
+        description: `${(killFrac*100).toFixed(0)}% POPULATION LOST · ${formatPop(before)} → ${formatPop(Math.max(0, before - populationLost))}`,
       });
     }
+    // Roll up with any in-flight drain from a previous strike so multi-
+    // impact bursts don't reset the animation half-way through.
+    const prior = target.populationDeathRoll;
+    const remaining = (prior ? prior.remaining : 0) + populationLost;
+    target.populationDeathRoll = {
+      remaining,
+      ratePerRealSec: remaining / 4.0,   // ~4 s of real-time drain
+    };
   }
 
   // Biosphere damage — large impacts drop stages, planet-killers wipe.

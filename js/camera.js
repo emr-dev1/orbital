@@ -187,6 +187,19 @@ canvas.addEventListener('click', e => {
     const hit = ray.intersectObject(spinner);
     if (hit.length && hit[0].distance < cd) { cd = hit[0].distance; closest = b; }
   }
+  // Black-hole forge mode owns the click first — body click sets target,
+  // empty-space click relocates the BH spawn anywhere on the ecliptic
+  // (including 100+ AU outside the system). bhMode and aimMode are
+  // mutually exclusive in practice (only one panel open at a time).
+  if (state.bhMode) {
+    if (closest) {
+      window.dispatchEvent(new CustomEvent('orbital:bh-target', { detail: { name: closest.name } }));
+    } else {
+      const p = pickWorldPoint(e.clientX, e.clientY);
+      if (p) window.dispatchEvent(new CustomEvent('orbital:bh-spawn', { detail: { x: p.x, y: 0, z: p.z } }));
+    }
+    return;
+  }
   if (state.aimMode) {
     if (closest) {
       // Body click → set the launch TARGET.

@@ -222,3 +222,25 @@ export function makeGlowSprite(color, size, opacity = 1) {
   const s = new THREE.Sprite(mat); s.scale.set(size, size, 1);
   return s;
 }
+
+// Photon-ring texture for the BH halo. A thin glowing ring drawn into a
+// canvas; renderable as a SpriteMaterial map so it always faces the camera
+// (the way Einstein's photon-sphere image actually appears observationally).
+export function makeRingTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 256, 256);
+  // Bright outer arc + soft glow
+  ctx.shadowColor = 'rgba(255, 220, 150, 0.85)';
+  ctx.shadowBlur = 16;
+  ctx.strokeStyle = 'rgba(255, 240, 200, 1)';
+  ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.arc(128, 128, 108, 0, Math.PI * 2); ctx.stroke();
+  // A second softer pass for layered glow
+  ctx.shadowBlur = 28;
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255, 200, 140, 0.7)';
+  ctx.beginPath(); ctx.arc(128, 128, 108, 0, Math.PI * 2); ctx.stroke();
+  return new THREE.CanvasTexture(c);
+}

@@ -274,6 +274,194 @@ canvas { display: block; cursor: crosshair; }
 }
 .nav-btn.active .swatch { box-shadow: none; }
 
+/* =================================================================
+   EARTH MODE — replaces the left stack with a focused event picker.
+   Activated by adding `.earth-mode` to <body>.
+   ================================================================= */
+
+/* Earth Mode trigger button — keep visually distinct from neighbours. */
+.btn.earth-mode-btn {
+  border-color: rgba(110, 180, 255, 0.45);
+  color: #b6d8ff;
+  letter-spacing: 0.22em;
+}
+.btn.earth-mode-btn:hover {
+  background: rgba(110, 180, 255, 0.12);
+  border-color: #6eb4ff; color: #cfe6ff;
+  box-shadow: 0 0 14px rgba(110,180,255,0.28);
+}
+.btn.earth-mode-btn.active {
+  background: #6eb4ff; color: var(--bg); border-color: #6eb4ff;
+}
+
+/* Solar Flare — sun-tinted CTA. */
+.btn.solar-flare-btn {
+  border-color: rgba(255, 180, 70, 0.45);
+  color: #ffc580;
+  letter-spacing: 0.22em;
+}
+.btn.solar-flare-btn:hover {
+  background: rgba(255, 180, 70, 0.12);
+  border-color: #ffb446; color: #ffd49a;
+  box-shadow: 0 0 14px rgba(255, 180, 70, 0.28);
+}
+.btn.solar-flare-btn:active {
+  background: #ffb446; color: var(--bg); border-color: #ffb446;
+}
+
+/* MODIFY panel — appears below inspector when a body is focused.
+   Sliders edit the focused body's mass / size live; the PREDICT button
+   draws dashed prediction lines for every other body to show how the
+   change ripples through the system. */
+.modify-panel { padding: 14px 18px; }
+.modify-target {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 13px; color: var(--accent);
+  letter-spacing: 0.18em;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px; margin-bottom: 12px;
+  text-align: center;
+}
+.modify-stat {
+  font-size: 9px; color: var(--dim);
+  letter-spacing: 0.16em;
+  margin-top: 4px;
+  text-align: right;
+}
+.modify-hint {
+  font-size: 9px; letter-spacing: 0.20em;
+  color: var(--dim); padding: 6px 0 0;
+  text-align: center; text-transform: uppercase;
+}
+
+/* Habitable Zone toggle — Goldilocks green. */
+.btn.habzone-btn {
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  padding: 9px 4px;
+}
+.btn.habzone-btn:hover {
+  border-color: var(--good); color: var(--good);
+  box-shadow: 0 0 14px rgba(110, 231, 168, 0.25);
+}
+.btn.habzone-btn.active {
+  background: var(--good); color: var(--bg); border-color: var(--good);
+  box-shadow: 0 0 14px rgba(110, 231, 168, 0.4);
+}
+
+/* Hide-by-default; revealed inside .earth-mode body. */
+.earth-panel { display: none; padding: 16px 18px; }
+
+body.earth-mode .stack-left > .panel:not(.earth-panel) { display: none; }
+body.earth-mode .earth-panel { display: block; }
+
+.earth-head {
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px; margin-bottom: 12px;
+}
+.earth-title {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 16px; letter-spacing: 0.18em; color: #b6d8ff;
+}
+.earth-sub {
+  font-size: 8px; letter-spacing: 0.28em; color: var(--dim);
+  margin-top: 4px;
+}
+.earth-exit {
+  width: auto; flex: none; padding: 6px 10px;
+  font-size: 9px; letter-spacing: 0.18em;
+  border-color: rgba(255,85,48,0.4); color: var(--accent);
+}
+.earth-exit:hover {
+  background: var(--accent); color: var(--bg);
+  box-shadow: 0 0 14px rgba(255,85,48,0.3);
+}
+
+.earth-section { margin-bottom: 12px; }
+.earth-section-title {
+  font-size: 9px; letter-spacing: 0.32em; color: var(--dim);
+  margin-bottom: 8px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Event chooser — three full-width buttons with icon + label. */
+.event-radio { display: flex; flex-direction: column; gap: 4px; }
+.event-btn {
+  display: flex; align-items: center; gap: 12px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-family: inherit; font-size: 11px; letter-spacing: 0.18em;
+  padding: 10px 12px;
+  cursor: pointer; text-transform: uppercase;
+  transition: all 140ms ease;
+}
+.event-btn:hover {
+  border-color: #b6d8ff; color: #cfe6ff;
+}
+.event-btn.active {
+  background: rgba(110,180,255,0.10);
+  border-color: #6eb4ff; color: #cfe6ff;
+  box-shadow: inset 0 0 14px rgba(110,180,255,0.12);
+}
+.event-icon {
+  font-size: 14px;
+  width: 18px; text-align: center;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+.event-btn[data-evt="FLARE"].active .event-icon { color: #ffb347; }
+.event-btn[data-evt="ICE"].active .event-icon   { color: #b6d8ff; }
+.event-btn[data-evt="ASTEROID"].active .event-icon { color: var(--accent); }
+
+/* Per-event tuning sub-panel — slides in below the chooser. */
+.earth-tune {
+  margin-top: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.tune-pills {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-bottom: 8px;
+}
+.tune-pill {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-family: inherit; font-size: 9px; letter-spacing: 0.14em;
+  padding: 6px 8px;
+  cursor: pointer; text-transform: uppercase;
+  transition: all 140ms ease;
+  flex: 1; min-width: fit-content;
+}
+.tune-pill:hover {
+  border-color: #b6d8ff; color: #cfe6ff;
+}
+.tune-pill.active {
+  background: rgba(110,180,255,0.18);
+  border-color: #6eb4ff; color: #cfe6ff;
+}
+.earth-hint {
+  font-size: 9px; letter-spacing: 0.20em;
+  color: var(--dim); padding: 6px 0 2px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+#triggerEventBtn {
+  width: 100%; margin-top: 10px;
+  background: #6eb4ff; color: var(--bg);
+  border-color: #6eb4ff;
+  font-size: 12px; letter-spacing: 0.24em; font-weight: 600;
+  padding: 12px 6px;
+  box-shadow: 0 0 18px rgba(110,180,255,0.25);
+}
+#triggerEventBtn:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 0 32px rgba(110,180,255,0.55);
+  color: var(--bg);
+}
+
 /* IMPACT MODAL */
 .impact-modal {
   position: fixed; top: 50%; left: 50%;
@@ -504,3 +692,297 @@ canvas { display: block; cursor: crosshair; }
 /* HUD-HIDDEN: when toggled off via keyboard H */
 body.hud-hidden .hud { display: none !important; }
 body.hud-hidden .aim-hint { display: none !important; }
+
+/* =====================================================================
+   BLACK HOLE FORGE PANEL
+   Modal-style overlay, deep violet aesthetic. Distinct from the LAUNCH
+   panel so a BH feels like a separate ritual, not a heavy asteroid.
+   ===================================================================== */
+
+.bh-open-btn {
+  background: linear-gradient(135deg, rgba(192, 132, 255, 0.18), rgba(255, 85, 48, 0.06)) !important;
+  border-color: rgba(160, 110, 255, 0.5) !important;
+  color: #c084ff !important;
+  letter-spacing: 0.18em !important;
+}
+.bh-open-btn:hover {
+  background: linear-gradient(135deg, rgba(192, 132, 255, 0.32), rgba(255, 85, 48, 0.16)) !important;
+  border-color: #c084ff !important;
+  color: #fff !important;
+  box-shadow: 0 0 18px rgba(192, 132, 255, 0.55) !important;
+}
+
+.bh-panel {
+  /* Right-side dock so the user can interact with the scene (click in
+     space to position the BH, click bodies to retarget) while the panel
+     stays open. Width tuned for the 5+ sections inside without horizontal
+     scrolling. */
+  position: fixed;
+  top: 16px; right: 16px;
+  width: 380px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 22px 24px;
+  z-index: 60;
+  background: linear-gradient(135deg, rgba(15, 8, 28, 0.96), rgba(8, 4, 16, 0.96));
+  border: 1px solid rgba(160, 110, 255, 0.45);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow:
+    0 0 60px rgba(120, 80, 200, 0.30),
+    inset 0 0 36px rgba(80, 40, 140, 0.15);
+  display: none;
+  pointer-events: auto;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text);
+}
+.bh-panel.show {
+  display: block;
+  animation: bhMaterialise 320ms cubic-bezier(.2, .9, .3, 1.2);
+}
+.bh-panel::-webkit-scrollbar { width: 4px; }
+.bh-panel::-webkit-scrollbar-thumb { background: rgba(160, 110, 255, 0.3); }
+.bh-panel::-webkit-scrollbar-track { background: transparent; }
+@keyframes bhMaterialise {
+  from { transform: translateX(20px); opacity: 0; filter: blur(6px); }
+  to   { transform: translateX(0);    opacity: 1; filter: blur(0); }
+}
+
+.bh-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  border-bottom: 1px solid rgba(160, 110, 255, 0.22);
+  padding-bottom: 14px; margin-bottom: 16px;
+}
+.bh-title {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 26px; letter-spacing: 0.22em;
+  background: linear-gradient(90deg, #c084ff 0%, #ff5530 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  text-shadow: 0 0 24px rgba(192, 132, 255, 0.5);
+  margin-bottom: 4px;
+}
+.bh-sub {
+  font-size: 9px; letter-spacing: 0.32em; color: var(--dim);
+}
+.bh-close {
+  background: transparent;
+  border: 1px solid rgba(160, 110, 255, 0.3);
+  color: var(--text);
+  width: 30px; height: 30px;
+  font-family: inherit; font-size: 16px; line-height: 1;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+.bh-close:hover {
+  border-color: #c084ff; color: #c084ff;
+  box-shadow: 0 0 14px rgba(192, 132, 255, 0.4);
+}
+
+.bh-section { margin-bottom: 16px; }
+.bh-section:last-of-type { margin-bottom: 0; }
+.bh-section-title {
+  font-size: 9px; letter-spacing: 0.32em;
+  color: rgba(160, 110, 255, 0.75);
+  margin-bottom: 8px; padding-bottom: 4px;
+  border-bottom: 1px solid rgba(160, 110, 255, 0.15);
+  text-transform: uppercase;
+}
+
+/* Live mini-preview: black sphere wrapped in three spinning elliptical
+   rings — pure CSS, no extra renderer. */
+.bh-preview {
+  position: relative;
+  width: 120px; height: 80px;
+  margin: 6px auto 14px;
+  pointer-events: none;
+}
+.bh-preview-horizon {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px; height: 36px;
+  background: radial-gradient(circle, #000 35%, #0a0418 100%);
+  border-radius: 50%;
+  box-shadow:
+    0 0 28px rgba(0, 0, 0, 0.95),
+    0 0 40px rgba(120, 80, 200, 0.45),
+    inset 0 0 8px rgba(0, 0, 0, 1);
+  z-index: 3;
+}
+.bh-preview-disk {
+  position: absolute; top: 50%; left: 50%;
+  border-radius: 50%;
+  border-style: solid;
+  pointer-events: none;
+}
+.bh-preview-disk.inner {
+  width: 70px; height: 22px;
+  border-color: #ffaa44 transparent;
+  border-width: 3px 0;
+  margin-top: -11px; margin-left: -35px;
+  filter: blur(0.7px) drop-shadow(0 0 10px rgba(255, 170, 68, 0.7));
+  animation: bhSpin 2.4s linear infinite;
+  z-index: 2;
+}
+.bh-preview-disk.mid {
+  width: 92px; height: 18px;
+  border-color: #ff7035 transparent;
+  border-width: 2px 0;
+  margin-top: -9px; margin-left: -46px;
+  filter: blur(0.8px) drop-shadow(0 0 8px rgba(255, 112, 53, 0.55));
+  animation: bhSpin 4.5s linear infinite reverse;
+  z-index: 1;
+}
+.bh-preview-disk.outer {
+  width: 116px; height: 14px;
+  border-color: #ff4020 transparent;
+  border-width: 1px 0;
+  margin-top: -7px; margin-left: -58px;
+  filter: blur(1.4px) drop-shadow(0 0 6px rgba(255, 64, 32, 0.45));
+  animation: bhSpin 7.5s linear infinite;
+  z-index: 1;
+}
+@keyframes bhSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Class pills — 2x2 grid */
+.bh-class-pills {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.bh-pill {
+  background: transparent;
+  border: 1px solid rgba(160, 110, 255, 0.3);
+  color: var(--text);
+  font-family: inherit; font-size: 10px; letter-spacing: 0.16em;
+  padding: 10px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 160ms ease;
+}
+.bh-pill:hover {
+  border-color: #c084ff; color: #c084ff;
+  background: rgba(192, 132, 255, 0.08);
+}
+.bh-pill.active {
+  background: linear-gradient(135deg, rgba(192, 132, 255, 0.32), rgba(255, 85, 48, 0.18));
+  border-color: #c084ff; color: #fff;
+  box-shadow: 0 0 16px rgba(192, 132, 255, 0.45);
+}
+
+/* Slider */
+input[type=range].bh-slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 3px;
+  background: linear-gradient(90deg, rgba(160, 110, 255, 0.5), rgba(255, 85, 48, 0.5));
+  outline: none; border-radius: 0;
+  margin: 8px 0 4px;
+}
+input[type=range].bh-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 22px;
+  background: linear-gradient(180deg, #c084ff, #6840a0);
+  cursor: pointer; border-radius: 0;
+  box-shadow: 0 0 10px rgba(192, 132, 255, 0.7);
+}
+input[type=range].bh-slider::-moz-range-thumb {
+  width: 12px; height: 22px;
+  background: linear-gradient(180deg, #c084ff, #6840a0);
+  cursor: pointer; border: none; border-radius: 0;
+  box-shadow: 0 0 10px rgba(192, 132, 255, 0.7);
+}
+
+.bh-mass-display {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-top: 6px;
+}
+.bh-mass-main {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 18px; color: #fff;
+  letter-spacing: 0.06em;
+}
+.bh-mass-solar {
+  font-size: 11px; color: var(--dim);
+  letter-spacing: 0.10em;
+}
+.bh-class-label {
+  margin-top: 6px;
+  font-size: 9px; letter-spacing: 0.24em;
+  color: #c084ff;
+  text-shadow: 0 0 8px rgba(192, 132, 255, 0.5);
+}
+
+.bh-metric {
+  display: flex; justify-content: space-between;
+  font-size: 11px; padding: 5px 0;
+  border-bottom: 1px dashed rgba(160, 110, 255, 0.12);
+}
+.bh-metric:last-child { border-bottom: none; }
+.bh-metric .k { color: var(--dim); letter-spacing: 0.12em; }
+.bh-metric .v { color: #fff; font-weight: 500; letter-spacing: 0.04em; }
+
+.bh-example {
+  padding: 10px 14px;
+  background: rgba(160, 110, 255, 0.07);
+  border: 1px solid rgba(160, 110, 255, 0.22);
+  font-size: 11px; letter-spacing: 0.12em;
+  color: #c084ff;
+  text-align: center;
+  text-shadow: 0 0 6px rgba(192, 132, 255, 0.4);
+}
+
+.bh-target-pills {
+  display: flex; flex-wrap: wrap; gap: 4px;
+}
+.bh-target-pill {
+  background: transparent;
+  border: 1px solid rgba(160, 110, 255, 0.3);
+  color: var(--text);
+  font-family: inherit; font-size: 9px; letter-spacing: 0.12em;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 140ms ease;
+  display: flex; align-items: center; gap: 5px;
+}
+.bh-target-pill:hover {
+  border-color: #c084ff; color: #c084ff;
+}
+.bh-target-pill.active {
+  background: rgba(192, 132, 255, 0.25);
+  border-color: #c084ff; color: #fff;
+  box-shadow: 0 0 12px rgba(192, 132, 255, 0.4);
+}
+.bh-target-pill .swatch {
+  width: 6px; height: 6px; border-radius: 50%;
+  box-shadow: 0 0 4px currentColor;
+}
+
+.bh-fire {
+  width: 100%;
+  background: linear-gradient(135deg, #c084ff 0%, #ff5530 100%);
+  color: #060214;
+  border: none;
+  font-family: 'Major Mono Display', monospace;
+  font-size: 14px; letter-spacing: 0.28em;
+  font-weight: 600;
+  padding: 14px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 200ms ease;
+  margin-top: 12px;
+  box-shadow: 0 0 24px rgba(192, 132, 255, 0.5);
+}
+.bh-fire:hover {
+  filter: brightness(1.18);
+  box-shadow: 0 0 40px rgba(192, 132, 255, 0.85), 0 0 60px rgba(255, 85, 48, 0.4);
+  transform: translateY(-1px);
+}
+.bh-fire:active { transform: translateY(0); }
+.bh-cancel {
+  margin-top: 6px; width: 100%;
+}
