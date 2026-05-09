@@ -104,6 +104,7 @@
     <div class="nav-grid" id="navGrid"></div>
     <div class="nav-grid" style="margin-top:6px;">
       <button class="btn" id="overviewBtn">OVERVIEW</button>
+      <button class="btn" id="beltViewBtn">BELT</button>
       <button class="btn" id="freeCamBtn">FREE CAM</button>
     </div>
   </div>
@@ -439,17 +440,25 @@
   </div>
 </div>
 
-<!-- Mobile bottom dock — only visible on small landscape screens.
-     Tabs toggle a body class which CSS uses to surface the matching
-     panel as a slide-up bottom sheet. Tap an active tab again (or the
-     canvas) to dismiss. -->
-<div class="mobile-dock" id="mobileDock">
-  <button class="mobile-tab" data-panel="ctrl">CTRL</button>
-  <button class="mobile-tab" data-panel="nav">NAV</button>
-  <button class="mobile-tab" data-panel="view">VIEW</button>
-  <button class="mobile-tab" data-panel="info">INFO</button>
-  <button class="mobile-tab" data-panel="edit">EDIT</button>
-</div>
+<!-- Mobile shell — only visible on small landscape screens. The FAB is
+     always visible in the top-left (safe-area aware so it clears the
+     notch / Dynamic Island). Tapping it opens the drawer, which slides
+     in from the left and contains a tab strip + the active panel.
+     Nothing is anchored to the bottom of the viewport so Safari's URL
+     bar can't cover it. -->
+<button class="mobile-fab" id="mobileFab" aria-label="Toggle menu">
+  <span class="fab-icon">☰</span>
+</button>
+
+<aside class="mobile-drawer" id="mobileDrawer" aria-hidden="true">
+  <div class="mobile-drawer-tabs" id="mobileDrawerTabs">
+    <button class="mobile-drawer-tab active" data-panel="ctrl">CTRL</button>
+    <button class="mobile-drawer-tab" data-panel="nav">NAV</button>
+    <button class="mobile-drawer-tab" data-panel="view">VIEW</button>
+    <button class="mobile-drawer-tab" data-panel="info">INFO</button>
+    <button class="mobile-drawer-tab" data-panel="edit">EDIT</button>
+  </div>
+</aside>
 
 <script type="importmap">
 {
