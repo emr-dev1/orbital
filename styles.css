@@ -986,3 +986,103 @@ input[type=range].bh-slider::-moz-range-thumb {
 .bh-cancel {
   margin-top: 6px; width: 100%;
 }
+
+/* =================================================================
+   MOBILE / TOUCH SUPPORT
+   ================================================================= */
+
+/* Canvas swallows native touch gestures (scroll, pinch-zoom-the-page)
+   so they don't fight with our orbit / pinch-zoom-the-camera handlers. */
+canvas { touch-action: none; }
+
+/* HUD panels keep vertical scroll inside — long inspector content
+   should still scroll on touch. */
+.stack-left, .stack-right { touch-action: pan-y; }
+
+/* Hide-by-default; the portrait media query at the bottom reveals it. */
+.orientation-lock {
+  display: none;
+  position: fixed; inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  color: var(--text);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.rotate-icon {
+  font-size: 72px;
+  color: var(--accent);
+  margin-bottom: 24px;
+  animation: rotate-hint 2.5s ease-in-out infinite;
+  text-shadow: 0 0 24px rgba(255, 85, 48, 0.6);
+}
+@keyframes rotate-hint {
+  0%, 100% { transform: rotate(0deg); }
+  20%      { transform: rotate(-10deg); }
+  60%      { transform: rotate(85deg); }
+  80%      { transform: rotate(90deg); }
+}
+.orientation-title {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 28px; letter-spacing: 0.32em;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+.orientation-text {
+  font-size: 13px; letter-spacing: 0.32em;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.orientation-sub {
+  font-size: 9px; letter-spacing: 0.28em;
+  color: var(--dim);
+}
+
+/* Activate the lock on small portrait screens. Larger devices in
+   portrait (iPad, laptops) keep working normally. */
+@media (orientation: portrait) and (max-width: 900px) {
+  .orientation-lock { display: flex; }
+  .hud { display: none !important; }
+  .aim-panel, .impact-modal, .help-overlay, .bh-panel { display: none !important; }
+}
+
+/* Compact HUD for small landscape screens (phones in landscape). */
+@media (orientation: landscape) and (max-height: 540px) {
+  .topbar { top: 8px; left: 8px; right: 8px; }
+  .brand { font-size: 15px; letter-spacing: 0.14em; }
+  .brand .sub { display: none; }
+  .clock { font-size: 9px; }
+  .clock .big { font-size: 13px; }
+
+  .stack-left, .stack-right {
+    top: 56px;
+    width: 200px;
+    gap: 8px;
+    max-height: calc(100vh - 70px);
+  }
+  .stack-left { left: 8px; }
+  .stack-right { right: 8px; }
+
+  .panel { padding: 10px 12px; }
+  .panel h3 { font-size: 9px; margin-bottom: 8px; padding-bottom: 6px; }
+  .ctrl { margin-bottom: 8px; }
+  .ctrl label { font-size: 9px; margin-bottom: 4px; }
+  .btn { padding: 7px 4px; font-size: 9px; letter-spacing: 0.12em; }
+  .nav-btn { font-size: 8px; padding: 6px 2px; letter-spacing: 0.10em; }
+  .view-pills .btn { font-size: 8px; padding: 5px 2px; }
+
+  .ins-section { margin-top: 8px; }
+  .ins-row { font-size: 10px; padding: 2px 0; }
+  .ins-section-title { font-size: 8px; }
+
+  .readout { font-size: 10px; padding: 3px 0; }
+
+  .aim-panel { width: 92vw; left: 4vw; transform: none; bottom: 8px; padding: 10px 12px; }
+  .aim-grid { grid-template-columns: repeat(3, 1fr); gap: 6px 12px; }
+  .aim-stat .v { font-size: 11px; }
+}
+

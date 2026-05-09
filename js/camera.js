@@ -237,3 +237,108 @@ window.addEventListener('keyup', e => {
   pressedKeys.delete(e.code);
 });
 window.addEventListener('blur', () => pressedKeys.clear());
+
+// =====================================================================
+// TOUCH controls — phone / tablet support. Mirrors the mouse handlers
+// but sourced from touch events:
+//   1 finger drag         → orbit (yaw / pitch), same as left mouse
+//   2 fingers pinch       → zoom, same as wheel
+//   2 fingers translate   → pan the look-at point, same as middle drag
+//   1 finger tap (no drag)→ click, dispatches MouseEvent so the existing
+//                            click handler picks the body / sets aim spawn
+//
+// Reuses the module-level dragging / mouseDownX/Y vars so the click
+// handler's drag-distance gate works without modification.
+// =====================================================================
+
+let pinching = false;
+let pinchPrevDist   = 0;
+let pinchPrevCenter = { x: 0, y: 0 };
+const TAP_THRESHOLD = 10;      // pixels — movement under this counts as a tap
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    mouseDownX = t.clientX; mouseDownY = t.clientY;
+    lastX = t.clientX;      lastY = t.clientY;
+    dragging = true;
+    pinching = false;
+  } else if (e.touches.length === 2) {
+    dragging = false;
+    pinching = true;
+    const t0 = e.touches[0], t1 = e.touches[1];
+    pinchPrevDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+    pinchPrevCenter = {
+      x: (t0.clientX + t1.clientX) / 2,
+      y: (t0.clientY + t1.clientY) / 2,
+    };
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (pinching && e.touches.length >= 2) {
+    const t0 = e.touches[0], t1 = e.touches[1];
+    // Pinch → zoom (ratio of distances).
+    const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+    const f = pinchPrevDist / Math.max(dist, 1);
+    camState.targetDist = Math.max(8, Math.min(8000, camState.targetDist * f));
+    camState.dist       = Math.max(8, Math.min(8000, camState.dist * f));
+    pinchPrevDist = dist;
+
+    // Two-finger drag → pan the look-at point (mirrors middle-mouse pan).
+    const center = {
+      x: (t0.clientX + t1.clientX) / 2,
+      y: (t0.clientY + t1.clientY) / 2,
+    };
+    const dx = center.x - pinchPrevCenter.x;
+    const dy = center.y - pinchPrevCenter.y;
+    pinchPrevCenter = center;
+    const scale = camState.dist * 0.0018;
+    const right = new THREE.Vector3(Math.cos(camState.yaw), 0, -Math.sin(camState.yaw));
+    const up    = new THREE.Vector3(0, 1, 0);
+    camState.targetGoal.addScaledVector(right, -dx * scale);
+    camState.targetGoal.addScaledVector(up,     dy * scale);
+    if (camState.focusBody) camState.focusBody = null;
+  } else if (dragging && e.touches.length === 1) {
+    const t = e.touches[0];
+    const dx = t.clientX - lastX, dy = t.clientY - lastY;
+    camState.yaw   -= dx * 0.005;
+    camState.pitch -= dy * 0.005;
+    camState.pitch = Math.max(-1.4, Math.min(1.4, camState.pitch));
+    lastX = t.clientX; lastY = t.clientY;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (e.touches.length === 0) {
+    // Lifted last finger. If the touch never moved much, treat it as a
+    // click — same body-pick / aim-spawn semantics as the mouse path.
+    if (dragging) {
+      const dragDist = Math.hypot(lastX - mouseDownX, lastY - mouseDownY);
+      if (dragDist < TAP_THRESHOLD) {
+        canvas.dispatchEvent(new MouseEvent('click', {
+          clientX: lastX, clientY: lastY,
+          button: 0, bubbles: true, cancelable: true,
+        }));
+      }
+    }
+    dragging = false;
+    pinching = false;
+  } else if (e.touches.length === 1) {
+    // One finger lifted from a pinch — resume single-touch drag from the
+    // remaining finger so the user doesn't have to release-and-re-grab.
+    pinching = false;
+    const t = e.touches[0];
+    lastX = t.clientX; lastY = t.clientY;
+    mouseDownX = t.clientX; mouseDownY = t.clientY;
+    dragging = true;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchcancel', () => {
+  dragging = false;
+  pinching = false;
+});

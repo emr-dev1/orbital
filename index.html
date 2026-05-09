@@ -2,10 +2,23 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#05060a">
 <title>ORBITAL — n-body sandbox</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+<!-- Portrait-orientation block — shown only on phones / small tablets in
+     portrait. Pure CSS, no JS required: a media query toggles display. -->
+<div class="orientation-lock" id="orientationLock">
+  <div class="rotate-icon">⟳</div>
+  <div class="orientation-title">ORBITAL</div>
+  <div class="orientation-text">ROTATE YOUR DEVICE</div>
+  <div class="orientation-sub">LANDSCAPE MODE REQUIRED</div>
+</div>
 
 <div class="grain"></div>
 <canvas id="c"></canvas>
@@ -119,6 +132,10 @@
           <span class="event-icon">⌬</span>
           <span class="event-label">ASTEROID</span>
         </button>
+        <button class="event-btn" data-evt="BELT">
+          <span class="event-icon">∴</span>
+          <span class="event-label">BELT EJECTION</span>
+        </button>
       </div>
     </div>
 
@@ -145,6 +162,15 @@
         <input type="range" id="iceDur" min="100" max="10000" step="100" value="2000">
       </div>
       <div class="earth-hint" id="iceHint">MAJOR GLACIATION · 30-50% ICE COVER</div>
+    </div>
+
+    <!-- BELT EJECTION TUNING -->
+    <div class="earth-tune" id="tuneBelt" style="display:none;">
+      <div class="ctrl">
+        <label>KICK STRENGTH <span class="val" id="beltKickLabel"></span></label>
+        <input type="range" id="beltKick" min="0.05" max="1.0" step="0.01" value="0.30">
+      </div>
+      <div class="earth-hint" id="beltHint">PERIHELION 0.96 AU · MODERATE KICK · 2-5 EARTH CROSSINGS</div>
     </div>
 
     <!-- ASTEROID TUNING -->
