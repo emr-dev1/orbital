@@ -36,7 +36,7 @@
 </div>
 
 <div class="hud stack-left">
-  <div class="panel">
+  <div class="panel controls-panel">
     <h3>CONTROLS</h3>
 
     <div class="ctrl">
@@ -167,7 +167,7 @@
     <!-- BELT EJECTION TUNING -->
     <div class="earth-tune" id="tuneBelt" style="display:none;">
       <div class="ctrl">
-        <label>KICK STRENGTH <span class="val" id="beltKickLabel"></span></label>
+        <label>KICK STRENGTH <span class="val" id="beltKickLabel">30%</span></label>
         <input type="range" id="beltKick" min="0.05" max="1.0" step="0.01" value="0.30">
       </div>
       <div class="earth-hint" id="beltHint">PERIHELION 0.96 AU · MODERATE KICK · 2-5 EARTH CROSSINGS</div>
@@ -437,6 +437,18 @@
     <div class="row-help"><span class="k"><kbd>?</kbd></span><span class="v">TOGGLE THIS HELP</span></div>
     <div class="row-help"><span class="k"><kbd>ESC</kbd></span><span class="v">CLOSE HELP / CANCEL AIM</span></div>
   </div>
+</div>
+
+<!-- Mobile bottom dock — only visible on small landscape screens.
+     Tabs toggle a body class which CSS uses to surface the matching
+     panel as a slide-up bottom sheet. Tap an active tab again (or the
+     canvas) to dismiss. -->
+<div class="mobile-dock" id="mobileDock">
+  <button class="mobile-tab" data-panel="ctrl">CTRL</button>
+  <button class="mobile-tab" data-panel="nav">NAV</button>
+  <button class="mobile-tab" data-panel="view">VIEW</button>
+  <button class="mobile-tab" data-panel="info">INFO</button>
+  <button class="mobile-tab" data-panel="edit">EDIT</button>
 </div>
 
 <script type="importmap">

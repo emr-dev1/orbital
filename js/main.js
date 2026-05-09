@@ -18,6 +18,7 @@ import { initSolarFlareUI, updateSolarFlares } from './solar_flare.js';
 import { updateTidalStreams } from './tidal_stream.js';
 import { initHabZoneUI, updateHabitableZones } from './habitable_zone.js';
 import { initBodyEditor, updateBodyEditor } from './body_editor.js';
+import { initMobileDock } from './mobile.js';
 
 buildSolarSystem();
 computeAccelerations(state.bodies);
@@ -31,6 +32,7 @@ initBlackHoleUI();
 initSolarFlareUI();
 initHabZoneUI();
 initBodyEditor();
+initMobileDock();
 
 let lastFrameTime = performance.now();
 
@@ -55,15 +57,10 @@ function tick() {
       state.simTime += dt;
       const hit = detectImpact();
       if (hit) {
-        let [imp, tgt, ii, jj, tImpact] = hit;
-        // Black holes always win. detectImpact returns the asteroid as
-        // `imp` and the planet as `tgt`, but if a BH is the launched body
-        // we want IT to survive and absorb the planet. Swap so mergeImpact
-        // (which kills `imp` and grows `tgt`) does the right thing.
-        if (imp.isBlackHole && !tgt.isBlackHole) {
-          [imp, tgt] = [tgt, imp];
-          [ii,  jj]  = [jj, ii];
-        }
+        const [imp, tgt, ii, jj, tImpact] = hit;
+        // detectImpact already orders the pair so `tgt` is the survivor
+        // (black hole > non-asteroid > more massive) and `imp` is the
+        // body that gets consumed.
         // No modal popup — the inspector EVENTS log + on-screen animation
         // (debris, shock waves, camera snap, ticking population counter)
         // already tell the impact story without blocking the view.

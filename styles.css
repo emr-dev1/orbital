@@ -413,6 +413,7 @@ body.earth-mode .earth-panel { display: block; }
 .event-btn[data-evt="FLARE"].active .event-icon { color: #ffb347; }
 .event-btn[data-evt="ICE"].active .event-icon   { color: #b6d8ff; }
 .event-btn[data-evt="ASTEROID"].active .event-icon { color: var(--accent); }
+.event-btn[data-evt="BELT"].active .event-icon     { color: #d2a880; }
 
 /* Per-event tuning sub-panel — slides in below the chooser. */
 .earth-tune {
@@ -1050,39 +1051,151 @@ canvas { touch-action: none; }
   .aim-panel, .impact-modal, .help-overlay, .bh-panel { display: none !important; }
 }
 
-/* Compact HUD for small landscape screens (phones in landscape). */
+/* =================================================================
+   MOBILE BOTTOM-DOCK LAYOUT (phones in landscape)
+   The default left/right side stacks become bottom-anchored sheets,
+   surfaced one at a time by tabs in a persistent bottom dock. The
+   scene is fully visible whenever no sheet is open.
+   ================================================================= */
+
+/* Hidden by default — only the mobile media query reveals the dock. */
+.mobile-dock { display: none; }
+
 @media (orientation: landscape) and (max-height: 540px) {
-  .topbar { top: 8px; left: 8px; right: 8px; }
-  .brand { font-size: 15px; letter-spacing: 0.14em; }
+  /* Compact top bar */
+  .topbar { top: 6px; left: 8px; right: 8px; }
+  .brand { font-size: 14px; letter-spacing: 0.14em; }
   .brand .sub { display: none; }
   .clock { font-size: 9px; }
-  .clock .big { font-size: 13px; }
+  .clock .big { font-size: 12px; }
+  .clock > div:first-child { display: none; }   /* hide "SIM TIME" label */
 
+  /* Stack containers become layout-transparent so individual panels can
+     be positioned anywhere on screen — the children render into the
+     document flow as if the .stack-left wrapper didn't exist. */
   .stack-left, .stack-right {
-    top: 56px;
-    width: 200px;
-    gap: 8px;
-    max-height: calc(100vh - 70px);
+    display: contents;
   }
-  .stack-left { left: 8px; }
-  .stack-right { right: 8px; }
 
-  .panel { padding: 10px 12px; }
+  /* Hide every panel by default; only the active sheet shows. */
+  .panel { display: none; }
+
+  /* Active sheet — the panel matching the body class becomes a fixed
+     bottom-anchored card sitting just above the dock, scrollable on
+     touch (-webkit-overflow-scrolling for iOS momentum scroll,
+     overscroll-behavior to keep page scroll from chaining). */
+  body.mobile-ctrl .controls-panel,
+  body.mobile-nav  .nav-dock,
+  body.mobile-view .view-dock,
+  body.mobile-info .telemetry,
+  body.mobile-info .inspector,
+  body.mobile-edit .modify-panel {
+    display: block !important;
+    position: fixed;
+    left: 6px;
+    right: 6px;
+    bottom: 56px;
+    max-height: calc(100vh - 70px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    z-index: 99;
+    border: 1px solid var(--accent);
+    background: rgba(8, 10, 16, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 12px 14px;
+    margin: 0;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.6);
+  }
+  /* INFO is two stacked panels — telemetry sits above inspector. */
+  body.mobile-info .telemetry { bottom: calc(56px + 110px); max-height: 100px; }
+  body.mobile-info .inspector { bottom: 56px; max-height: calc(100vh - 180px); }
+
+  /* When Earth Mode is active, the earth panel takes over and the dock
+     hides — the panel has its own EXIT button. */
+  body.earth-mode .earth-panel {
+    display: block !important;
+    position: fixed;
+    left: 6px; right: 6px; bottom: 6px;
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    z-index: 110;
+    border: 1px solid var(--accent);
+    background: rgba(8, 10, 16, 0.96);
+  }
+  body.earth-mode .mobile-dock { display: none; }
+
+  /* Compact panel internals so more fits in the bottom-sheet height */
   .panel h3 { font-size: 9px; margin-bottom: 8px; padding-bottom: 6px; }
-  .ctrl { margin-bottom: 8px; }
+  .ctrl { margin-bottom: 10px; }
   .ctrl label { font-size: 9px; margin-bottom: 4px; }
-  .btn { padding: 7px 4px; font-size: 9px; letter-spacing: 0.12em; }
-  .nav-btn { font-size: 8px; padding: 6px 2px; letter-spacing: 0.10em; }
-  .view-pills .btn { font-size: 8px; padding: 5px 2px; }
-
+  .btn { padding: 9px 4px; font-size: 10px; letter-spacing: 0.12em; }
+  .nav-btn { font-size: 9px; padding: 9px 2px; letter-spacing: 0.10em; }
+  .view-pills .btn { font-size: 9px; padding: 8px 2px; }
   .ins-section { margin-top: 8px; }
   .ins-row { font-size: 10px; padding: 2px 0; }
   .ins-section-title { font-size: 8px; }
-
   .readout { font-size: 10px; padding: 3px 0; }
 
-  .aim-panel { width: 92vw; left: 4vw; transform: none; bottom: 8px; padding: 10px 12px; }
+  /* Aim / launch panel: full width, lifted above the dock. */
+  .aim-panel {
+    width: calc(100vw - 12px); left: 6px; right: 6px; transform: none;
+    bottom: 56px; padding: 10px 12px;
+  }
   .aim-grid { grid-template-columns: repeat(3, 1fr); gap: 6px 12px; }
   .aim-stat .v { font-size: 11px; }
+
+  /* Mobile dock — persistent bottom bar with tab buttons. */
+  .mobile-dock {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 48px;
+    padding: 4px;
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+    gap: 4px;
+    background: rgba(8, 10, 16, 0.94);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line-strong);
+    z-index: 100;
+    pointer-events: auto;
+  }
+  .mobile-tab {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--line-strong);
+    color: var(--dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0.20em;
+    padding: 6px 2px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 140ms ease;
+    border-radius: 0;
+  }
+  .mobile-tab.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    box-shadow: 0 0 12px rgba(255,85,48,0.35);
+  }
+
+  /* Help / impact / BH panels rendered as full-screen overlays */
+  .help-overlay, .impact-modal, .bh-panel {
+    width: calc(100vw - 16px); max-width: none; min-width: 0;
+    left: 8px; right: 8px; transform: none;
+    top: 56px; bottom: 56px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .help-overlay.show, .impact-modal.show, .bh-panel.show { display: block; }
 }
 
