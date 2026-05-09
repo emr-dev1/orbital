@@ -2,6 +2,8 @@
 
 Browser-based n-body solar system sandbox. No build step. Open `index.html` in any modern browser, or serve the directory.
 
+**Try it live:** **[orbital-a97.pages.dev](https://orbital-a97.pages.dev/)** — desktop or phone in landscape.
+
 ## What it does
 
 - Simulates the Sun, eight planets, the Moon, and 10+ major moons (Phobos/Deimos, the Galileans, Titan, Enceladus, Titania, Triton…) with **Yoshida 4th-order symplectic** integration in SI units.
