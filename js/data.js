@@ -152,6 +152,44 @@ export const NAV_DIST = {
 };
 export const NAV_ORDER = ['SUN','MERCURY','VENUS','EARTH','MOON','MARS','JUPITER','SATURN','URANUS','NEPTUNE'];
 
+// Biosphere progression — STERILE 0, PREBIOTIC 1, MICROBIAL 2, COMPLEX 3,
+// INTELLIGENT 4. evolution.js advances a body's stage when it stays
+// habitable for `STAGE_DURATION_YEARS[stage]`. Major impacts can regress.
+export const BIOSPHERE_STAGES = ['STERILE', 'PREBIOTIC', 'MICROBIAL', 'COMPLEX', 'INTELLIGENT'];
+export const STAGE_DURATION_YEARS = [80, 400, 1500, 4000];
+
+// Asteroid composition presets. Density sets the physical radius (small
+// dense iron, large fluffy ice). waterFraction is the mass fraction of
+// the body that is liquid/ice water — drives the "icy comet hits Earth →
+// oceans grow" effect when the body lands. `color` tints the rendered
+// asteroid mesh.
+export const COMPOSITIONS = {
+  ROCKY:        { density: 3000, waterFraction: 0,    color: 0xff5530, label: 'ROCKY'        },
+  ICY:          { density: 1500, waterFraction: 0.6,  color: 0xa0d8ff, label: 'ICY'          },
+  IRON:         { density: 7800, waterFraction: 0,    color: 0xa39a8a, label: 'IRON'         },
+  CARBONACEOUS: { density: 2200, waterFraction: 0.10, color: 0x6b5e4a, label: 'CARBONACEOUS' },
+};
+
+// Famous-body presets for the LAUNCH panel. Mass + composition are real;
+// `dv` is the suggested Δv that gives a recognisable trajectory toward the
+// suggested target. Spawn position is auto-computed from the catalog entry's
+// approximate distance and direction (rough — for cinematic feel, not
+// orbital perfection).
+export const ASTEROID_CATALOG = [
+  { name: 'TUNGUSKA',  mass: 1e8,    composition: 'ICY',          dv: 15, target: 'EARTH',
+    notes: 'AIRBURST · 1908 SIBERIA · 50-METRE BODY' },
+  { name: 'APOPHIS',   mass: 6.1e10, composition: 'ROCKY',        dv: 12, target: 'EARTH',
+    notes: 'NEAR-EARTH · 2029 FLYBY · 370-METRE PEANUT' },
+  { name: 'BENNU',     mass: 7.3e10, composition: 'CARBONACEOUS', dv: 12, target: 'EARTH',
+    notes: 'CARBONACEOUS · WATER + ORGANICS · OSIRIS-REX SAMPLE' },
+  { name: 'CHICXULUB', mass: 1e15,   composition: 'ROCKY',        dv: 20, target: 'EARTH',
+    notes: 'DINOSAUR-EXTINCTION CLASS · 10-KM BODY · 100M MT YIELD' },
+  { name: 'CERES',     mass: 9.4e20, composition: 'ICY',          dv:  8, target: 'EARTH',
+    notes: 'DWARF PLANET · 25% WATER ICE · LARGEST BELT BODY' },
+  { name: 'THEIA',     mass: 6.4e23, composition: 'ROCKY',        dv: 10, target: 'EARTH',
+    notes: 'HYPOTHETICAL MARS-MASS · MOON-FORMING IMPACT (4.5 GYR AGO)' },
+];
+
 // Per-body descriptors for the BODY INSPECTOR panel. Static reference values
 // for now; the dynamic ones (`water`, `iceCover`, `co2`, `population`,
 // `biosphere`, `habitability`, `surfaceTemp`) are also seeded onto each Body

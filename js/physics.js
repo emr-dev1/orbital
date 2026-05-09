@@ -269,6 +269,21 @@ export function step(arr, dt) {
 // Collision detection and trajectory prediction
 // =====================================================================
 
+// Visual collision radius — matches what visuals.js draws as the body's
+// sphere so "appears to touch" actually registers as a contact. Earth's
+// physical 6.37 Mm radius would be 0.006 render units; our visual sphere
+// is 2 render units, so the user can fly an asteroid right through the
+// rendered Earth and miss the physical centre. Using the visual radius
+// closes that gap. Inlined here (instead of importing visuals.js) to keep
+// physics.js dependency-free.
+const _R_EARTH = 6.37e6;
+function bodyCollisionRadius(b) {
+  if (b.name === 'SUN') return 18 * RENDER_SCALE;
+  const rRender = 2.0 * Math.sqrt(b.displayRadius / _R_EARTH);
+  const r = b.isAsteroid ? Math.max(0.3, rRender) : rRender;
+  return r * RENDER_SCALE;
+}
+
 // Continuous collision: does the relative-position segment between
 // (a_prev − b_prev) and (a_curr − b_curr) ever come within sumR? Solve
 // |p + t·Δp|² = sumR² for t ∈ [0,1]. Returns the earliest entry t, or −1.
@@ -308,7 +323,7 @@ export function detectImpact() {
     for (let j = 0; j < bodies.length; j++) {
       if (i === j) continue;
       const b = bodies[j]; if (!b.alive) continue;
-      const sumR = a.displayRadius + b.displayRadius;
+      const sumR = bodyCollisionRadius(a) + bodyCollisionRadius(b);
       const t = ccdHit(a, b, sumR);
       if (t >= 0 && (!best || t < best.t)) {
         best = { a, b, i, j, t };
@@ -340,7 +355,7 @@ export function predictTrajectory(asteroidProto, steps, dtPredict) {
     vx: asteroidProto.vx, vy: asteroidProto.vy, vz: asteroidProto.vz,
     ax: 0, ay: 0, az: 0,
     mass: asteroidProto.mass, alive: true, displayRadius: probeRadius,
-    name: 'PROBE', isProbe: true,
+    name: 'PROBE', isProbe: true, isAsteroid: true,
   });
   computeAccelerations(clones);
   const path = [];
@@ -349,11 +364,13 @@ export function predictTrajectory(asteroidProto, steps, dtPredict) {
   for (let s = 0; s < steps; s++) {
     step(clones, dtPredict); // step() snapshots prev for CCD
     path.push([probe.px / RENDER_SCALE, probe.py / RENDER_SCALE, probe.pz / RENDER_SCALE]);
-    // CCD against every solar-system body in the prediction.
+    // CCD against every solar-system body in the prediction. Use the same
+    // visual-radius collision sphere as live detection, so the predicted-hit
+    // marker matches what the user will actually experience.
     for (let j = 0; j < clones.length - 1; j++) {
       const tgt = clones[j];
       if (!tgt.alive) continue;
-      const sumR = tgt.displayRadius + probe.displayRadius;
+      const sumR = bodyCollisionRadius(tgt) + bodyCollisionRadius(probe);
       const t = ccdHit(probe, tgt, sumR);
       if (t >= 0) { impactIdx = j; s = steps; break; }
     }

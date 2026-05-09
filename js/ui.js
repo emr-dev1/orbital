@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { state } from './state.js';
-import { WARP_LEVELS, NAV_ORDER, NAV_DIST, AU, RENDER_SCALE } from './data.js';
+import { WARP_LEVELS, NAV_ORDER, NAV_DIST, AU, RENDER_SCALE, COMPOSITIONS, ASTEROID_CATALOG, BIOSPHERE_STAGES, STAGE_DURATION_YEARS } from './data.js';
 import { buildSolarSystem } from './physics.js';
 import { rebuildVisuals, trailLines, labelDivs, renderPos, visualRadius } from './visuals.js';
 import { camState } from './camera.js';
@@ -84,7 +84,9 @@ labelsBtn.onclick = () => {
 // Launch state: spawn point in render units (set by clicking empty space)
 // and target body name (set by clicking a body, or via a TARGET pill).
 const launchState = { targetName: 'EARTH' };
-const launchTargetEl = document.getElementById('launchTarget');
+const launchTargetEl      = document.getElementById('launchTarget');
+const launchCompositionEl = document.getElementById('launchComposition');
+const launchCatalogEl     = document.getElementById('launchCatalog');
 
 function populateLaunchTargets() {
   launchTargetEl.innerHTML = '';
@@ -102,7 +104,54 @@ function populateLaunchTargets() {
     launchTargetEl.appendChild(btn);
   }
 }
+
+// Composition pill row — controls the asteroid's density (drives radius)
+// and water-fraction (drives water deposit on impact).
+function populateLaunchCompositions() {
+  launchCompositionEl.innerHTML = '';
+  for (const [key, info] of Object.entries(COMPOSITIONS)) {
+    const btn = document.createElement('button');
+    btn.className = 'launch-pill' + (state.launchComposition === key ? ' active' : '');
+    btn.dataset.name = key;
+    btn.innerHTML = `<span class="swatch" style="background:${colorHex(info.color)};color:${colorHex(info.color)}"></span>${info.label}`;
+    btn.onclick = () => {
+      state.launchComposition = key;
+      for (const p of launchCompositionEl.children) p.classList.toggle('active', p.dataset.name === key);
+    };
+    launchCompositionEl.appendChild(btn);
+  }
+}
+
+// Famous-asteroid catalog row — clicking a preset fills mass slider, Δv
+// slider, composition, and target pill so the user can reach a known
+// scenario in one click. Suggested-target is selected too.
+function populateLaunchCatalog() {
+  launchCatalogEl.innerHTML = '';
+  for (const preset of ASTEROID_CATALOG) {
+    const btn = document.createElement('button');
+    btn.className = 'launch-pill';
+    btn.dataset.name = preset.name;
+    btn.title = preset.notes;
+    btn.textContent = preset.name;
+    btn.onclick = () => {
+      // Fill sliders
+      const massEl = document.getElementById('mass');
+      const speedEl = document.getElementById('speed');
+      massEl.value  = Math.log10(preset.mass);
+      speedEl.value = preset.dv;
+      massEl.dispatchEvent(new Event('input'));
+      speedEl.dispatchEvent(new Event('input'));
+      // Composition + target pills
+      state.launchComposition = preset.composition;
+      for (const p of launchCompositionEl.children) p.classList.toggle('active', p.dataset.name === preset.composition);
+      setLaunchTargetByName(preset.target);
+    };
+    launchCatalogEl.appendChild(btn);
+  }
+}
+
 export function getLaunchTarget() { return state.bodies.find(b => b.name === launchState.targetName); }
+export function getLaunchComposition() { return state.launchComposition; }
 
 // Sync target pill active class with current selection. Called from the
 // scene-click event listener below.
@@ -140,6 +189,8 @@ aimBtn.onclick = () => {
       state.launchSpawn = new THREE.Vector3(150, 0, 0);
     }
     populateLaunchTargets();
+    populateLaunchCompositions();
+    populateLaunchCatalog();
   } else {
     state.launchSpawn = null;
   }
@@ -152,7 +203,7 @@ fireBtn.onclick = () => {
   if (!state.aimMode || !state.launchSpawn) return;
   const tgt = getLaunchTarget();
   if (!tgt) return;
-  const ast = fireAsteroid(state.launchSpawn, tgt);
+  const ast = fireAsteroid(state.launchSpawn, tgt, state.launchComposition);
   if (ast) {
     // Track the asteroid into its target. Initial camera distance scales to
     // the spawn→target distance so the user sees both endpoints initially.
@@ -364,6 +415,7 @@ function rowBar(k, v, fraction, cls = '') {
 }
 
 let _lastInspectedBody = null;
+let _inspectorTick = 0;
 
 // Build the inspector panel for `body` once. Static fields go in the HTML;
 // dynamic fields (current distance, velocity) get their own IDs and are
@@ -410,23 +462,34 @@ function renderInspector(body) {
   </div>`);
 
   if (body.atmosphere) {
+    const tempStr = body.surfaceTemp !== undefined
+      ? `${body.surfaceTemp.toFixed(0)} K · ${(body.surfaceTemp - 273).toFixed(0)}°C`
+      : null;
     sections.push(`<div class="ins-section">
       <div class="ins-section-title">ATMOSPHERE</div>
       ${row('COMPOSITION', body.atmosphere)}
       ${body.pressure !== undefined ? row('PRESSURE', fmtPressure(body.pressure)) : ''}
-      ${body.surfaceTemp !== undefined ? row('SURFACE TEMP', body.surfaceTemp + ' K · ' + (body.surfaceTemp - 273).toFixed(0) + '°C') : ''}
+      ${tempStr ? row('SURFACE TEMP', tempStr) : ''}
       ${body.cloudTopTemp !== undefined ? row('CLOUD-TOP TEMP', body.cloudTopTemp + ' K') : ''}
+      ${body.dustOptical > 0.01 ? rowBar('DUST', (body.dustOptical * 100).toFixed(0) + '%', body.dustOptical, 'warn') : ''}
+      ${body.evolves ? row('CLIMATE', climateState(body), climateClass(body)) : ''}
     </div>`);
   }
 
   if (body.water !== undefined || body.biosphere) {
     const habCls = body.habitability > 0.5 ? 'good' : body.habitability > 0.1 ? 'warn' : 'hot';
+    const stageIdx = body.biosphereStage ?? 0;
+    const nextStage = BIOSPHERE_STAGES[stageIdx + 1];
+    const stageMax  = STAGE_DURATION_YEARS[stageIdx];
+    const habYears  = Math.max(0, body.habitableYears || 0);
+    const stageProg = stageMax ? Math.min(1, habYears / stageMax) : 1;
     sections.push(`<div class="ins-section">
       <div class="ins-section-title">HABITABILITY</div>
       ${body.water !== undefined ? rowBar('WATER COVER', (body.water * 100).toFixed(1) + '%', body.water, 'good') : ''}
       ${body.iceCover !== undefined ? rowBar('ICE COVER', (body.iceCover * 100).toFixed(1) + '%', body.iceCover) : ''}
-      ${body.co2 !== undefined ? row('CO₂', body.co2 + ' ppm') : ''}
+      ${body.co2 !== undefined && body.co2 > 0 ? row('CO₂', body.co2.toFixed(0) + ' ppm') : ''}
       ${body.biosphere ? row('BIOSPHERE', body.biosphere, body.habitability > 0.5 ? 'good' : '') : ''}
+      ${nextStage && stageMax ? rowBar(`→ ${nextStage}`, `${habYears.toFixed(0)} / ${stageMax} yr`, stageProg, 'good') : ''}
       ${body.habitability !== undefined ? rowBar('HABITABILITY', (body.habitability * 100).toFixed(0) + '%', body.habitability, habCls) : ''}
     </div>`);
   }
@@ -434,7 +497,8 @@ function renderInspector(body) {
   if (body.population !== undefined) {
     sections.push(`<div class="ins-section">
       <div class="ins-section-title">CIVILIZATION</div>
-      ${row('POPULATION', fmtPopulation(body.population), 'good')}
+      ${row('POPULATION', fmtPopulation(body.population), body.population > 1e6 ? 'good' : body.population > 0 ? 'warn' : 'hot')}
+      ${body.populationCarryingCapacity ? row('CAPACITY', fmtPopulation(body.populationCarryingCapacity * (body.habitability || 1))) : ''}
     </div>`);
   }
 
@@ -459,7 +523,43 @@ function renderInspector(body) {
     sections.push(`<div class="ins-notes">${body.notes}</div>`);
   }
 
+  // Recent events log — impacts, extinctions, biosphere advances.
+  if (body.events && body.events.length) {
+    sections.push(`<div class="ins-section">
+      <div class="ins-section-title">EVENTS</div>
+      ${body.events.slice(0, 5).map(e =>
+        `<div class="ins-event"><span class="t">${formatEventTime(e.time)}</span><span class="d ${e.type === 'IMPACT' ? 'hot' : e.type === 'EVOLUTION' ? 'good' : 'warn'}">${e.description}</span></div>`
+      ).join('')}
+    </div>`);
+  }
+
   insBodyEl.innerHTML = sections.join('');
+}
+
+// Climate state classification for the inspector ATMOSPHERE row.
+function climateState(b) {
+  if (b.dustOptical > 0.3)                             return 'IMPACT WINTER';
+  if (b.iceCover > 0.7 && b.surfaceTemp < 240)         return 'SNOWBALL';
+  if (b.iceCover > 0.3)                                return 'ICE AGE';
+  if (b.surfaceTemp > 380)                             return 'GREENHOUSE';
+  if (b.surfaceTemp > 320)                             return 'HOT';
+  if (b.surfaceTemp > 250)                             return 'TEMPERATE';
+  if (b.surfaceTemp > 200)                             return 'COLD';
+  return 'FROZEN';
+}
+function climateClass(b) {
+  if (b.dustOptical > 0.3 || b.iceCover > 0.6 || b.surfaceTemp > 380) return 'hot';
+  if (b.iceCover > 0.3 || b.surfaceTemp > 320 || b.surfaceTemp < 230) return 'warn';
+  if (b.habitability > 0.5)                                            return 'good';
+  return '';
+}
+function formatEventTime(eventTime) {
+  const dt = state.simTime - eventTime;
+  if (dt < 60) return 'NOW';
+  if (dt < 3600)         return Math.round(dt / 60) + 'm AGO';
+  if (dt < 86400)        return Math.round(dt / 3600) + 'h AGO';
+  if (dt < 86400 * 365)  return Math.round(dt / 86400) + 'd AGO';
+  return (dt / 86400 / 365).toFixed(1) + 'y AGO';
 }
 
 function updateInspectorDynamic(body) {
@@ -490,10 +590,16 @@ export function updateTelemetry() {
   const cur = new Date(epoch + state.simTime * 1000);
   document.getElementById('simdate').textContent = cur.toISOString().slice(0,10);
 
-  // Re-render inspector when focus changes; update dynamic readouts every frame.
-  if (camState.focusBody !== _lastInspectedBody) {
-    renderInspector(camState.focusBody);
-    _lastInspectedBody = camState.focusBody;
+  // Re-render inspector when focus changes. For evolving bodies, also
+  // re-render at ~10Hz so climate/biosphere/population readouts stay live.
+  // Distance/velocity refresh every frame via updateInspectorDynamic.
+  _inspectorTick++;
+  const f = camState.focusBody;
+  if (f !== _lastInspectedBody) {
+    renderInspector(f);
+    _lastInspectedBody = f;
+  } else if (f && (f.evolves || f.events || f.population !== undefined) && _inspectorTick % 6 === 0) {
+    renderInspector(f);
   }
-  updateInspectorDynamic(camState.focusBody);
+  updateInspectorDynamic(f);
 }

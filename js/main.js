@@ -8,14 +8,17 @@ import { renderer, scene, camera } from './scene.js';
 import { buildSolarSystem, computeAccelerations, step, detectImpact, mergeImpact } from './physics.js';
 import { rebuildVisuals, syncBodyVisuals, updateLabels, bodyMeshes, trailLines, labelDivs } from './visuals.js';
 import { updateCamera, camState } from './camera.js';
-import { showImpact, updateAimVisual } from './asteroid.js';
+import { showImpact, updateAimVisual, spawnImpactDebris, updateImpactDebris } from './asteroid.js';
 import { buildAsteroidBelt, updateAsteroidBelt } from './asteroid_belt.js';
+import { markEvolvers, update as evolutionUpdate, reset as evolutionReset, applyImpactEffects } from './evolution.js';
 import { populateNavDock, updateTelemetry, getLaunchTarget } from './ui.js';
 
 buildSolarSystem();
 computeAccelerations(state.bodies);
 rebuildVisuals();
 buildAsteroidBelt();
+markEvolvers();
+evolutionReset();
 populateNavDock();
 
 let lastFrameTime = performance.now();
@@ -43,14 +46,14 @@ function tick() {
       if (hit) {
         const [imp, tgt, ii, _jj, tImpact] = hit;
         showImpact(imp, tgt);
+        // Spawn a particle burst at the impact site BEFORE mergeImpact
+        // dissolves the impactor — uses the impactor's velocity to scatter.
+        spawnImpactDebris(imp, tgt);
         mergeImpact(imp, tgt, tImpact); // conserve mass + momentum + (axial) angular momentum
-        // If the camera was tracking the impactor (post-launch following),
-        // hand focus over to the target so the user keeps a frame on the
-        // collision instead of staring at empty space.
+        applyImpactEffects(imp, tgt);    // climate / biosphere / population update
         if (camState.focusBody === imp) {
           camState.focusBody = tgt;
         }
-        // remove impactor visuals
         const m = bodyMeshes.get(state.bodies[ii]); if (m) scene.remove(m);
         const l = trailLines.get(state.bodies[ii]); if (l) scene.remove(l);
         const d = labelDivs.get(state.bodies[ii]);  if (d) d.remove();
@@ -83,8 +86,12 @@ function tick() {
     }
   }
 
+  // Climate / biosphere / population — only when sim is running.
+  if (!state.paused) evolutionUpdate();
+
   syncBodyVisuals(realDt);
   updateAsteroidBelt();
+  updateImpactDebris(realDt);
   updateAimVisual(getLaunchTarget());
   updateLabels(camera);
   updateCamera(realDt);

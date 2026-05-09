@@ -187,6 +187,16 @@ canvas { display: block; cursor: crosshair; }
   font-size: 10px; line-height: 1.5;
   color: var(--dim); letter-spacing: 0.10em;
 }
+.ins-event {
+  display: flex; gap: 8px;
+  font-size: 10px; padding: 3px 0;
+  letter-spacing: 0.06em;
+}
+.ins-event .t { color: var(--dim); width: 60px; flex-shrink: 0; }
+.ins-event .d { color: var(--text); flex: 1; word-break: break-word; }
+.ins-event .d.good { color: var(--good); }
+.ins-event .d.warn { color: var(--warn); }
+.ins-event .d.hot  { color: var(--accent); }
 
 .readout {
   display: flex; justify-content: space-between;

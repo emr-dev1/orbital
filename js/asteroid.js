@@ -7,7 +7,7 @@ import { scene, canvas, camera } from './scene.js';
 import { Body, computeAccelerations, predictTrajectory } from './physics.js';
 import { rebuildVisuals, renderPos, visualRadius } from './visuals.js';
 import { camState } from './camera.js';
-import { G, RENDER_SCALE, TNT_J, REF_EVENTS, WARP_LEVELS } from './data.js';
+import { G, RENDER_SCALE, TNT_J, REF_EVENTS, WARP_LEVELS, COMPOSITIONS } from './data.js';
 
 // --- prediction visuals ---
 // 1500 vertex capacity so multi-year transfer trajectories (Earth → Saturn,
@@ -43,6 +43,112 @@ export const launchpadMarker = new THREE.Group();
 }
 launchpadMarker.visible = false;
 scene.add(launchpadMarker);
+
+// =====================================================================
+// Impact debris — particle burst at the contact point. Each particle is
+// a 3-vector position + velocity in render units (Gm), with a remaining-
+// life counter (sim seconds). Renders as a single THREE.Points so even
+// hundreds of bursts stay cheap. No physics — particles fly ballistically
+// in render space and fade out.
+// =====================================================================
+const DEBRIS_CAPACITY = 600;
+const _debris = {
+  count: 0,
+  px:  new Float32Array(DEBRIS_CAPACITY),
+  py:  new Float32Array(DEBRIS_CAPACITY),
+  pz:  new Float32Array(DEBRIS_CAPACITY),
+  vx:  new Float32Array(DEBRIS_CAPACITY),
+  vy:  new Float32Array(DEBRIS_CAPACITY),
+  vz:  new Float32Array(DEBRIS_CAPACITY),
+  life: new Float32Array(DEBRIS_CAPACITY),    // remaining seconds (sim time)
+  lifeMax: new Float32Array(DEBRIS_CAPACITY),
+};
+const debrisGeo = new THREE.BufferGeometry();
+debrisGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DEBRIS_CAPACITY * 3), 3));
+debrisGeo.setAttribute('alpha',    new THREE.BufferAttribute(new Float32Array(DEBRIS_CAPACITY),    1));
+const debrisMat = new THREE.PointsMaterial({
+  color: 0xffaa66, size: 2.4, sizeAttenuation: false,
+  transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const debrisPoints = new THREE.Points(debrisGeo, debrisMat);
+debrisPoints.frustumCulled = false;
+scene.add(debrisPoints);
+debrisGeo.setDrawRange(0, 0);
+
+// Spawn ~40 particles at the impact site with random radial velocities
+// scaled to the impactor's speed. Big impacts → bigger spread + longer life.
+export function spawnImpactDebris(impactor, target) {
+  const dvx = impactor.vx - target.vx;
+  const dvy = impactor.vy - target.vy;
+  const dvz = impactor.vz - target.vz;
+  const vRel = Math.sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
+  // Particle ejection velocity in render units (1 Gm = 1 render unit).
+  // Scale to ~0.3× the relative impact velocity, but cap so a 100 km/s
+  // strike doesn't blow particles off-screen instantly.
+  const ejectVrender = Math.min(0.05, vRel * 0.3 / 1e9);  // render-units/s
+  // Bigger bursts for bigger impactors: scale particle count with log mass.
+  const n = Math.min(80, Math.max(20, Math.round(Math.log10(impactor.mass) * 4)));
+  const lifeSec = 86400 * 365 * 5;   // ~5 sim-years
+  const RENDER = 1e9;
+  for (let i = 0; i < n; i++) {
+    const k = (_debris.count + i) % DEBRIS_CAPACITY;
+    // Spawn at impactor's pre-merge position
+    _debris.px[k] = impactor.px / RENDER;
+    _debris.py[k] = impactor.py / RENDER;
+    _debris.pz[k] = impactor.pz / RENDER;
+    // Random radial direction
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const speed = ejectVrender * (0.5 + Math.random());
+    _debris.vx[k] = speed * Math.sin(phi) * Math.cos(theta);
+    _debris.vy[k] = speed * Math.cos(phi) * 0.5;   // bias toward ecliptic
+    _debris.vz[k] = speed * Math.sin(phi) * Math.sin(theta);
+    _debris.life[k]    = lifeSec * (0.6 + Math.random() * 0.8);
+    _debris.lifeMax[k] = _debris.life[k];
+  }
+  _debris.count = Math.min(DEBRIS_CAPACITY, _debris.count + n);
+}
+
+// Per-frame: advance debris ballistically in render space, fade alpha
+// proportional to remaining life, drop expired particles. realDt is real
+// seconds — debris uses sim time so its lifespan scales with warp.
+export function updateImpactDebris(realDt) {
+  if (_debris.count === 0) { debrisGeo.setDrawRange(0, 0); return; }
+  // Sim seconds to advance this frame.
+  const warpDt = (typeof state.lastDt === 'number' && state.lastSubsteps)
+    ? state.lastDt * state.lastSubsteps
+    : 0;
+  const dsim = state.paused ? 0 : warpDt;
+  const dRender = dsim * 1.0;        // particles already in render-space velocity per sim-second
+  const arr = debrisGeo.attributes.position.array;
+  let alive = 0;
+  for (let i = 0; i < _debris.count; i++) {
+    if (_debris.life[i] <= 0) continue;
+    _debris.px[i] += _debris.vx[i] * dRender;
+    _debris.py[i] += _debris.vy[i] * dRender;
+    _debris.pz[i] += _debris.vz[i] * dRender;
+    _debris.life[i] -= dsim;
+    if (_debris.life[i] <= 0) continue;
+    arr[alive*3]   = _debris.px[i];
+    arr[alive*3+1] = _debris.py[i];
+    arr[alive*3+2] = _debris.pz[i];
+    alive++;
+  }
+  debrisGeo.attributes.position.needsUpdate = true;
+  debrisGeo.setDrawRange(0, alive);
+  // Compact array: drop dead particles. Cheap because count is ≤ 600.
+  if (alive < _debris.count) {
+    let w = 0;
+    for (let i = 0; i < _debris.count; i++) {
+      if (_debris.life[i] <= 0) continue;
+      _debris.px[w] = _debris.px[i]; _debris.py[w] = _debris.py[i]; _debris.pz[w] = _debris.pz[i];
+      _debris.vx[w] = _debris.vx[i]; _debris.vy[w] = _debris.vy[i]; _debris.vz[w] = _debris.vz[i];
+      _debris.life[w] = _debris.life[i]; _debris.lifeMax[w] = _debris.lifeMax[i];
+      w++;
+    }
+    _debris.count = w;
+  }
+}
 
 // Local circular orbital velocity (prograde, CCW around +Y) at a given
 // position relative to the Sun. Without this, an asteroid placed in space
@@ -197,7 +303,7 @@ function fillAimPanel(spawnRender, target, predImpactIdx, launchState) {
 //
 // Returns the new asteroid Body so callers can hand it to the camera for
 // auto-tracking.
-export function fireAsteroid(spawnRender, target) {
+export function fireAsteroid(spawnRender, target, composition = 'ROCKY') {
   const ls = computeLaunchState(spawnRender, target);
   if (!ls) return null;
   const { spawnPxM, spawnPyM, spawnPzM, dirX, dirY, dirZ, baseV } = ls;
@@ -207,12 +313,16 @@ export function fireAsteroid(spawnRender, target) {
   const massExp = parseFloat(document.getElementById('mass').value);
   const mass = Math.pow(10, massExp);
 
-  const density = 3000;
-  const radius = Math.cbrt((3 * mass) / (4 * Math.PI * density));
+  // Composition drives density (larger fluffy ice vs small dense iron)
+  // and water deposit on impact. Default to rocky if unrecognised.
+  const compInfo = COMPOSITIONS[composition] || COMPOSITIONS.ROCKY;
+  const radius = Math.cbrt((3 * mass) / (4 * Math.PI * compInfo.density));
 
   const ast = new Body({
     name: 'ASTEROID-' + (state.bodies.filter(b => b.isAsteroid).length + 1).toString().padStart(2, '0'),
-    mass, displayRadius: radius, color: 0xff5530, isAsteroid: true,
+    mass, displayRadius: radius, color: compInfo.color, isAsteroid: true,
+    composition,                    // tag stored on the body so the impact handler can react
+    waterFraction: compInfo.waterFraction,
     px: spawnPxM, py: spawnPyM, pz: spawnPzM,
     vx: baseV.vx + dirX * v, vy: baseV.vy + dirY * v, vz: baseV.vz + dirZ * v,
   });

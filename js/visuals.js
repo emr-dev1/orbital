@@ -13,7 +13,10 @@ export const trailLines   = new Map();
 export const labelDivs    = new Map();
 
 const R_EARTH = 6.37e6;
-const MAX_ROT_PER_FRAME = Math.PI; // cap any spin so it stays legible at extreme warp
+// Hard cap on per-frame spin in radians. At 60 fps, 0.35 rad/frame ≈ 60°/s ≈
+// 6 RPM — fast enough to read as motion, slow enough that the texture stays
+// recognisable. At π/frame planets just strobed at high warp.
+const MAX_ROT_PER_FRAME = 0.35;
 const VISUAL_SPIN_BOOST = 6;       // planets spin 6x real speed for visibility
 
 // Atmospheric halo per body. `scale` is multiplier on the body's visual
